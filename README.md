@@ -1,7 +1,7 @@
 # Niramay - AI-Driven Waste Management System
 
 <div align="center">
-  <img src="" alt="Niramay Logo" width="300"/>
+  <img src="public/niramay-cover.jpg" alt="Niramay Logo" width="300"/>
   <p><em>Automating waste management for a cleaner future</em></p>
 </div>
 
