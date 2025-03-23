@@ -1,5 +1,5 @@
-// Use a valid API key - this is a placeholder, replace with your actual key
-const GEMINI_API_KEY = "AIzaSyC6GkcyoV2kHG302Mabjpn2PNLwfjjBd0U";
+// Use a valid API key - this is a placeholder, replace it with your actual key
+const GEMINI_API_KEY = "";
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-vision:generateContent";
 
