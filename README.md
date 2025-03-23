@@ -170,8 +170,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-- **Project Maintainer**: Your Name - your.email@example.com
-- **Website**: [niramay.example.com](https://niramay.example.com)
+- **Project Maintainer**: Piyush Kumar Puria - piyushkumarpuriabnss8@gmail.com
+- **Website**: [niramay-smartwaste.netlify.app](https://niramay-smartwaste.netlify.app/)
 
 ---
 
