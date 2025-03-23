@@ -1,18 +1,32 @@
 import { Link } from "react-router-dom";
-import { Trash2, Github, Twitter, Facebook } from "lucide-react";
+import {
+  Trash2,
+  Github,
+  Twitter,
+  Facebook,
+  Leaf,
+  Recycle,
+  Sprout,
+  TreePine,
+} from "lucide-react";
 
 export function Footer() {
   return (
-    <footer className="bg-background border-t py-8">
+    <footer className="bg-background border-t py-8 wave-decoration relative">
       <div className="container grid gap-8 md:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <Trash2 className="h-6 w-6 text-green-600" />
-            <span className="text-xl font-bold">SmartWaste</span>
+            <div className="relative">
+              <Recycle className="h-6 w-6 text-nature-500" />
+              <Leaf className="h-3 w-3 text-leaf-500 absolute -top-1 -right-1" />
+            </div>
+            <span className="text-xl font-bold bg-gradient-to-r from-nature-600 to-ocean-600 bg-clip-text text-transparent">
+              Niramay
+            </span>
           </div>
           <p className="text-sm text-muted-foreground">
             Automating waste management for a cleaner future. Join us in making
-            our cities cleaner and more sustainable.
+            our communities cleaner and more sustainable.
           </p>
         </div>
 
@@ -124,9 +138,23 @@ export function Footer() {
       </div>
 
       <div className="container mt-8 border-t pt-4">
-        <p className="text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} SmartWaste. All rights reserved.
-        </p>
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-center md:text-left text-sm text-muted-foreground">
+            © {new Date().getFullYear()} Niramay. All rights reserved.
+          </p>
+          <div className="flex items-center gap-2 text-nature-600">
+            <Leaf className="h-4 w-4" />
+            <span className="text-xs">
+              Reducing waste, one report at a time
+            </span>
+            <TreePine className="h-4 w-4" />
+          </div>
+        </div>
+      </div>
+
+      {/* Decorative tree element */}
+      <div className="absolute bottom-0 right-0 opacity-10 pointer-events-none hidden md:block">
+        <TreePine className="h-24 w-24 text-nature-600" />
       </div>
     </footer>
   );

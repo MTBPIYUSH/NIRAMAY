@@ -7,10 +7,13 @@ import {
   Menu,
   X,
   Bell,
+  Leaf,
+  Sprout,
+  Recycle,
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { ThemeToggle } from "./theme-toggle";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserAvatar } from "./auth/user-avatar";
 import { Badge } from "./ui/badge";
 import {
@@ -35,36 +38,55 @@ export function Navbar() {
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           <Link to="/" className="flex items-center gap-2">
-            <Trash2 className="h-6 w-6 text-green-600" />
-            <span className="text-xl font-bold">SmartWaste</span>
+            <div className="relative">
+              <Recycle className="h-6 w-6 text-nature-500" />
+              <Leaf className="h-3 w-3 text-leaf-500 absolute -top-1 -right-1" />
+            </div>
+            <span className="text-xl font-bold bg-gradient-to-r from-nature-600 to-ocean-600 bg-clip-text text-transparent">
+              Niramay
+            </span>
           </Link>
         </div>
 
         {/* Desktop Navigation */}
-        <nav className="hidden md:flex items-center gap-6">
-          <Link to="/" className="text-sm font-medium hover:text-primary">
+        <nav
+          className="hidden md:flex items-center gap-6"
+          aria-label="Main navigation"
+        >
+          <Link
+            to="/"
+            className="text-sm font-medium hover:text-nature-600 transition-colors relative group"
+          >
             Home
+            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-nature-500 transition-all group-hover:w-full"></span>
           </Link>
-          <Link to="/report" className="text-sm font-medium hover:text-primary">
+          <Link
+            to="/report"
+            className="text-sm font-medium hover:text-nature-600 transition-colors relative group"
+          >
             Report Waste
+            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-nature-500 transition-all group-hover:w-full"></span>
           </Link>
           <Link
             to="/dashboard"
-            className="text-sm font-medium hover:text-primary"
+            className="text-sm font-medium hover:text-nature-600 transition-colors relative group"
           >
             Dashboard
+            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-nature-500 transition-all group-hover:w-full"></span>
           </Link>
           <Link
             to="/leaderboard"
-            className="text-sm font-medium hover:text-primary"
+            className="text-sm font-medium hover:text-nature-600 transition-colors relative group"
           >
             Leaderboard
+            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-nature-500 transition-all group-hover:w-full"></span>
           </Link>
           <Link
             to="/contact"
-            className="text-sm font-medium hover:text-primary"
+            className="text-sm font-medium hover:text-nature-600 transition-colors relative group"
           >
             Contact
+            <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-nature-500 transition-all group-hover:w-full"></span>
           </Link>
         </nav>
 
@@ -136,8 +158,14 @@ export function Navbar() {
           </DropdownMenu>
 
           <div className="hidden md:flex items-center gap-3">
-            <Button asChild className="hidden md:flex">
-              <Link to="/report">Report Waste</Link>
+            <Button
+              asChild
+              className="hidden md:flex bg-nature-600 hover:bg-nature-700 transition-colors"
+            >
+              <Link to="/report" className="flex items-center gap-1">
+                <Sprout className="h-4 w-4" />
+                Report Waste
+              </Link>
             </Button>
             <UserAvatar />
           </div>

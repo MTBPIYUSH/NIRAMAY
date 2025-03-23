@@ -401,7 +401,7 @@ export default function DashboardPage() {
               <Button variant="outline" className="gap-2">
                 <BarChart className="h-4 w-4" /> Analytics
               </Button>
-              <Button className="gap-2">
+              <Button className="gap-2 bg-nature-600 hover:bg-nature-700 transition-colors">
                 <MapPin className="h-4 w-4" /> View Map
               </Button>
             </div>
