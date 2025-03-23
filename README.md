@@ -1,7 +1,7 @@
 # Niramay - AI-Driven Waste Management System
 
 <div align="center">
-  <img src="https://images.unsplash.com/photo-1532996122724-e3c354a0b15b?w=800&q=80" alt="Niramay Logo" width="300"/>
+  <img src="https://imagekit.io/tools/asset-public-link?detail=%7B%22name%22%3A%22Screenshot%202025-03-23%20123852.png%22%2C%22type%22%3A%22image%2Fpng%22%2C%22signedurl_expire%22%3A%222028-03-22T07%3A46%3A07.262Z%22%2C%22signedUrl%22%3A%22https%3A%2F%2Fmedia-hosting.imagekit.io%2F%2F8aef2dc2f6264699%2FScreenshot%25202025-03-23%2520123852.png%3FExpires%3D1837323967%26Key-Pair-Id%3DK2ZIVPTIP2VGHC%26Signature%3DUrxLlzG0kkgxI9V3EBZf-qskYh~63biulobQTiC9r8LuoiNWYUQ1dU20-cJj5hYbCy7~iwLxtnT0SLNVpQXlxutM85vhzDcKGL2qxyKwqrVnhtI2YaOnIzBtDzA0L8uzFHcxAEdOHN5VGeHtVwrA1TfImZK8ZGP2C0ffxgyWvJikypYnlQkX7Sw~8LSl6loufcAEEvHrxyrZ7Us8BC~WQs3WakuCAbywalDtmijNNkmv2ypZqfiC5USb~WfRW2yl5atLfcc9Ph~HFfTLkiqy69YplaSpUz4nkN2vpGZuhpeiOungG8UasaMXl7aIm~1AqweHKOchxp8M8JVOP2Jiuw__%22%7D" alt="Niramay Logo" width="300"/>
   <p><em>Automating waste management for a cleaner future</em></p>
 </div>
 
