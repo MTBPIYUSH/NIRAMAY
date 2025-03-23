@@ -1,5 +1,5 @@
 // Use a valid API key - this is a placeholder, replace with your actual key
-const GOOGLE_MAPS_API_KEY = "AIzaSyC6GkcyoV2kHG302Mabjpn2PNLwfjjBd0U";
+const GOOGLE_MAPS_API_KEY = "";
 
 export interface Location {
   lat: number;
