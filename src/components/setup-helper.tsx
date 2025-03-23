@@ -20,6 +20,21 @@ export function SetupHelper() {
     setMessage("Setting up database tables...");
 
     try {
+      // First check if we have the necessary permissions to run SQL
+      const { error: permissionCheckError } = await supabase.rpc("exec_sql", {
+        sql: "SELECT current_user;",
+      });
+
+      if (permissionCheckError) {
+        console.error("Permission error:", permissionCheckError);
+        setStatus("error");
+        setMessage(
+          `You don't have permission to run SQL commands. Please use the migration file instead.`,
+        );
+        setIsLoading(false);
+        return;
+      }
+
       // Split the SQL script into individual statements
       const statements = setupSql
         .split(";")
@@ -51,81 +66,62 @@ export function SetupHelper() {
       // Verify tables exist by querying them
       const { data: profilesData, error: profilesError } = await supabase
         .from("user_profiles")
-        .select("count")
-        .limit(1);
+        .select("count");
 
       if (profilesError) {
-        console.warn("Verification error for user_profiles:", profilesError);
+        console.error("Error verifying tables:", profilesError);
+        setStatus("error");
+        setMessage(
+          "Database setup completed with errors. Some tables may not have been created properly.",
+        );
       } else {
-        console.log("user_profiles table verified");
+        setStatus("success");
+        setMessage("Database setup completed successfully!");
       }
-
-      setStatus("success");
-      setMessage("Database setup completed successfully!");
-    } catch (error) {
-      console.error("Error setting up database:", error);
+    } catch (err) {
+      console.error("Setup script error:", err);
       setStatus("error");
-      setMessage(
-        `Error setting up database: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      setMessage(`Error setting up database: ${err}`);
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="space-y-4 w-full">
-      {status === "idle" && (
-        <Alert>
-          <Database className="h-4 w-4" />
-          <AlertTitle>Database Setup</AlertTitle>
-          <AlertDescription>
-            If you're experiencing issues with the application, you may need to
-            set up the database tables. Click the button below to run the setup
-            script.
-          </AlertDescription>
-        </Alert>
-      )}
+    <div className="space-y-4">
+      <Alert variant={status === "error" ? "destructive" : "default"}>
+        <Database className="h-4 w-4" />
+        <AlertTitle>
+          {status === "idle" && "Database Setup"}
+          {status === "loading" && "Setting up database..."}
+          {status === "success" && "Setup Complete"}
+          {status === "error" && "Setup Error"}
+        </AlertTitle>
+        <AlertDescription>{message}</AlertDescription>
+      </Alert>
 
-      {status === "loading" && (
-        <Alert>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <AlertTitle>Setting Up Database</AlertTitle>
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      )}
-
-      {status === "success" && (
-        <Alert className="bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800">
-          <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
-          <AlertTitle className="text-green-800 dark:text-green-300">
-            Success
-          </AlertTitle>
-          <AlertDescription className="text-green-700 dark:text-green-400">
-            {message}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {status === "error" && (
-        <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription>{message}</AlertDescription>
-        </Alert>
-      )}
-
-      <Button onClick={runSetupScript} disabled={isLoading} className="w-full">
+      <Button
+        onClick={runSetupScript}
+        disabled={isLoading || status === "loading"}
+        className="w-full"
+      >
         {isLoading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Setting Up Database...
+            Setting up database...
+          </>
+        ) : status === "success" ? (
+          <>
+            <CheckCircle2 className="mr-2 h-4 w-4" />
+            Database Ready
+          </>
+        ) : status === "error" ? (
+          <>
+            <AlertTriangle className="mr-2 h-4 w-4" />
+            Retry Setup
           </>
         ) : (
-          <>
-            <Database className="mr-2 h-4 w-4" />
-            Set Up Database Tables
-          </>
+          <>Initialize Database</>
         )}
       </Button>
     </div>

@@ -41,28 +41,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // If profile doesn't exist, create a default one
         if (error.code === "PGRST116") {
           console.log("Profile not found, creating default profile");
-          const { data: newProfile, error: createError } = await supabase
-            .from("user_profiles")
-            .upsert({
-              id: userId,
-              name: "User",
-              avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
-              points: 0,
-              reports: 0,
-              recycling: 0,
-              level: 1,
-              next_level_points: 200,
-              rank: 1,
-            })
-            .select();
 
-          if (createError) {
-            console.error("Error creating default profile:", createError);
+          try {
+            // First check if the user exists in auth.users
+            const { data: userData, error: userError } =
+              await supabase.auth.getUser(userId);
+
+            if (userError) {
+              console.error("Error getting user:", userError);
+              return null;
+            }
+
+            if (!userData.user) {
+              console.error("User not found in auth.users");
+              return null;
+            }
+
+            // Create the profile
+            const { data: newProfile, error: createError } = await supabase
+              .from("user_profiles")
+              .upsert({
+                id: userId,
+                name: userData.user.email
+                  ? userData.user.email.split("@")[0]
+                  : "User",
+                avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
+                points: 0,
+                reports: 0,
+                recycling: 0,
+                level: 1,
+                next_level_points: 200,
+                rank: 1,
+              })
+              .select();
+
+            if (createError) {
+              console.error("Error creating default profile:", createError);
+              // Try a different approach if the first one fails
+              const { data: retryProfile, error: retryError } = await supabase
+                .from("user_profiles")
+                .insert({
+                  id: userId,
+                  name: userData.user.email
+                    ? userData.user.email.split("@")[0]
+                    : "User",
+                  avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
+                  points: 0,
+                  reports: 0,
+                  recycling: 0,
+                  level: 1,
+                  next_level_points: 200,
+                  rank: 1,
+                })
+                .select();
+
+              if (retryError) {
+                console.error("Retry error creating profile:", retryError);
+                return null;
+              }
+
+              console.log("Created default profile (retry):", retryProfile);
+              return retryProfile[0] as UserProfile;
+            }
+
+            console.log("Created default profile:", newProfile);
+            return newProfile[0] as UserProfile;
+          } catch (err) {
+            console.error("Exception creating user profile:", err);
             return null;
           }
-
-          console.log("Created default profile:", newProfile);
-          return newProfile as UserProfile;
         }
         return null;
       }
@@ -110,9 +157,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error("Error initializing auth:", error);
       } finally {
+        // Ensure loading state is updated even if there's an error
         setLoading(false);
       }
     };
+
+    // Set a timeout to ensure loading state is eventually set to false
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.log("Auth initialization timeout - forcing loading to false");
+        setLoading(false);
+      }
+    }, 5000); // 5 second timeout
 
     initializeAuth();
 
@@ -139,7 +195,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
@@ -160,24 +219,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     console.log("Signing up user:", email);
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
 
-    if (error) {
-      console.error("Sign up error:", error);
-    } else {
+      if (error) {
+        console.error("Sign up error:", error);
+        return { data, error };
+      }
+
       console.log("Sign up successful:", data.user?.email);
 
-      // Create a user profile immediately after signup if we have a user
-      if (data.user) {
-        try {
-          await fetchUserProfile(data.user.id); // This will create a profile if it doesn't exist
-        } catch (profileErr) {
-          console.error("Error creating profile after signup:", profileErr);
-        }
-      }
-    }
+      // We don't create the profile immediately after signup
+      // because the user needs to confirm their email first
+      // The profile will be created when they sign in after confirmation
 
-    return { data, error };
+      return { data, error: null };
+    } catch (err) {
+      console.error("Exception during signup:", err);
+      return { data: null, error: err };
+    }
   };
 
   const signOut = async () => {

@@ -57,28 +57,8 @@ export function LoginForm() {
       if (data?.user?.identities?.length === 0) {
         setError("Email already in use. Please sign in instead.");
       } else if (data?.user) {
-        // Create a user profile immediately after signup
-        try {
-          const { error: profileError } = await supabase
-            .from("user_profiles")
-            .upsert({
-              id: data.user.id,
-              name: email.split("@")[0],
-              avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${data.user.id}`,
-              points: 0,
-              reports: 0,
-              recycling: 0,
-              level: 1,
-              next_level_points: 200,
-              rank: 1,
-            });
-
-          if (profileError) {
-            console.error("Error creating profile after signup:", profileError);
-          }
-        } catch (profileErr) {
-          console.error("Exception creating profile:", profileErr);
-        }
+        // We'll handle profile creation in auth-provider.tsx after confirmation
+        // This prevents race conditions between auth and profile creation
 
         setError(null);
         // Show confirmation message

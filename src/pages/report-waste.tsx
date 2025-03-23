@@ -20,7 +20,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Camera, Upload, MapPin } from "lucide-react";
+import {
+  Camera,
+  Upload,
+  MapPin,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+} from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/components/auth/auth-provider";
 
 export default function ReportWastePage() {
   const [location, setLocation] = useState("");
@@ -37,16 +47,148 @@ export default function ReportWastePage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Handle form submission logic here
-    console.log({ location, wasteType, description, image });
-    // Reset form
-    setLocation("");
-    setWasteType("");
-    setDescription("");
-    setImage(null);
-    setPreview(null);
+    setIsSubmitting(true);
+    setSubmitError(null);
+    setSubmitSuccess(false);
+
+    try {
+      // Validate form data
+      if (!location) {
+        throw new Error("Location is required");
+      }
+      if (!wasteType) {
+        throw new Error("Waste type is required");
+      }
+      if (!description) {
+        throw new Error("Description is required");
+      }
+
+      console.log("Submitting waste report:", {
+        location,
+        wasteType,
+        description,
+        image,
+      });
+
+      // Get current user
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.user) {
+        throw new Error("You must be logged in to submit a report");
+      }
+
+      // Generate a unique ID for the report
+      const reportId = `WR-${Date.now().toString().slice(-6)}`;
+
+      // Upload image if available
+      let imageUrl = null;
+      if (image) {
+        const fileExt = image.name.split(".").pop();
+        const filePath = `waste-reports/${reportId}/${Date.now()}.${fileExt}`;
+
+        const { error: uploadError, data: uploadData } = await supabase.storage
+          .from("waste-images")
+          .upload(filePath, image);
+
+        if (uploadError) {
+          console.error("Image upload error:", uploadError);
+          // Continue without image if upload fails
+        } else if (uploadData) {
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("waste-images").getPublicUrl(filePath);
+
+          imageUrl = publicUrl;
+        }
+      }
+
+      // Prepare location data
+      let locationData = {};
+      if (location.includes(",")) {
+        // Assume it's coordinates
+        const [lat, lng] = location
+          .split(",")
+          .map((coord) => parseFloat(coord.trim()));
+        locationData = {
+          latitude: lat,
+          longitude: lng,
+          formatted_address: location,
+        };
+      } else {
+        // Assume it's an address
+        locationData = {
+          formatted_address: location,
+        };
+      }
+
+      // Save report to database
+      const { error: reportError } = await supabase
+        .from("waste_reports")
+        .insert({
+          id: reportId,
+          user_id: session.user.id,
+          type: wasteType,
+          status: "Pending",
+          location: locationData,
+          description: description,
+          reported_at: new Date().toISOString(),
+          image_url: imageUrl,
+          urgent: wasteType === "hazardous",
+        });
+
+      if (reportError) {
+        console.error("Error saving report:", reportError);
+        throw new Error(`Failed to save report: ${reportError.message}`);
+      }
+
+      // Update user profile stats
+      const { error: profileError } = await supabase
+        .rpc("increment_user_reports", {
+          user_id: session.user.id,
+          points_to_add: 10,
+        })
+        .catch(() => {
+          // If the RPC doesn't exist, update manually
+          return supabase
+            .from("user_profiles")
+            .update({
+              reports: supabase.rpc("increment", { value: 1 }),
+              points: supabase.rpc("increment", { value: 10 }),
+            })
+            .eq("id", session.user.id);
+        });
+
+      if (profileError) {
+        console.warn("Error updating user stats:", profileError);
+        // Continue even if stats update fails
+      }
+
+      setSubmitSuccess(true);
+
+      // Reset form after successful submission
+      setTimeout(() => {
+        setLocation("");
+        setWasteType("");
+        setDescription("");
+        setImage(null);
+        setPreview(null);
+        setSubmitSuccess(false);
+      }, 3000);
+    } catch (error) {
+      console.error("Report submission error:", error);
+      setSubmitError(
+        error instanceof Error ? error.message : "Failed to submit report",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getCurrentLocation = () => {
@@ -199,12 +341,37 @@ export default function ReportWastePage() {
                   </div>
                 </div>
               </CardContent>
-              <CardFooter>
+              <CardFooter className="flex flex-col gap-4">
+                {submitError && (
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{submitError}</AlertDescription>
+                  </Alert>
+                )}
+
+                {submitSuccess && (
+                  <Alert className="bg-green-50 dark:bg-green-900 border-green-200 dark:border-green-800">
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    <AlertDescription className="text-green-700 dark:text-green-400">
+                      Report submitted successfully! Thank you for helping keep
+                      our community clean.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <Button
                   type="submit"
                   className="w-full bg-nature-600 hover:bg-nature-700 transition-colors"
+                  disabled={isSubmitting}
                 >
-                  Submit Report
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    "Submit Report"
+                  )}
                 </Button>
               </CardFooter>
             </form>
