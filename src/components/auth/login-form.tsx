@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./auth-provider";
 import { Button } from "@/components/ui/button";
@@ -15,29 +15,47 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { supabase } from "@/lib/supabase";
+import { useToast } from "@/components/ui/use-toast";
 
 export function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp, signInWithGoogle, user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate("/dashboard");
+    }
+  }, [user, navigate]);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
+    if (!email || !password) {
+      setError("Please enter both email and password");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { error } = await signIn(email, password);
-      if (error) throw error;
+      if (error) {
+        setError(error.message || "Failed to sign in");
+        setIsLoading(false);
+        return;
+      }
 
       // Add a small delay to ensure auth state is updated before redirect
       setTimeout(() => {
         navigate("/dashboard");
-      }, 500);
+      }, 1000);
     } catch (error: any) {
       console.error("Sign in error:", error);
       setError(error.message || "Failed to sign in");
@@ -50,19 +68,36 @@ export function LoginForm() {
     setIsLoading(true);
     setError(null);
 
+    if (!email || !password) {
+      setError("Please enter both email and password");
+      setIsLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long");
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { error, data } = await signUp(email, password);
-      if (error) throw error;
+      if (error) {
+        setError(error.message || "Failed to sign up");
+        setIsLoading(false);
+        return;
+      }
 
       if (data?.user?.identities?.length === 0) {
         setError("Email already in use. Please sign in instead.");
       } else if (data?.user) {
         // We'll handle profile creation in auth-provider.tsx after confirmation
         // This prevents race conditions between auth and profile creation
-
         setError(null);
-        // Show confirmation message
-        alert("Please check your email for a confirmation link!");
+        toast({
+          title: "Account created",
+          description: "Please check your email for a confirmation link.",
+        });
       }
     } catch (error: any) {
       console.error("Sign up error:", error);
@@ -73,11 +108,55 @@ export function LoginForm() {
   };
 
   const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+
     try {
       await signInWithGoogle();
+      // The redirect will happen automatically
     } catch (error: any) {
       console.error("Google sign in error:", error);
       setError(error.message || "Failed to sign in with Google");
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError("Please enter your email address");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { error } = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/auth/v1/recover`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+          },
+          body: JSON.stringify({
+            email,
+            redirect_to: `${window.location.origin}/auth/reset-password`,
+          }),
+        },
+      ).then((res) => res.json());
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      toast({
+        title: "Password reset email sent",
+        description: "Check your email for a password reset link",
+      });
+    } catch (error: any) {
+      console.error("Password reset error:", error);
+      setError(error.message || "Failed to send password reset email");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -86,7 +165,7 @@ export function LoginForm() {
       <Tabs defaultValue="signin">
         <CardHeader>
           <CardTitle className="text-2xl text-center">
-            Welcome to SmartWaste
+            Welcome to Niramay
           </CardTitle>
           <CardDescription className="text-center">
             Join our community to help create a cleaner environment
@@ -116,14 +195,21 @@ export function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <a href="#" className="text-sm text-primary hover:underline">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="p-0 h-auto text-sm text-primary"
+                    onClick={handleForgotPassword}
+                    disabled={isLoading}
+                  >
                     Forgot password?
-                  </a>
+                  </Button>
                 </div>
                 <Input
                   id="password"
@@ -132,6 +218,7 @@ export function LoginForm() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  disabled={isLoading}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
@@ -158,6 +245,7 @@ export function LoginForm() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -170,6 +258,7 @@ export function LoginForm() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
+                  disabled={isLoading}
                 />
                 <p className="text-xs text-muted-foreground">
                   Password must be at least 6 characters long
@@ -204,6 +293,7 @@ export function LoginForm() {
             className="w-full"
             onClick={handleGoogleSignIn}
             type="button"
+            disabled={isLoading}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

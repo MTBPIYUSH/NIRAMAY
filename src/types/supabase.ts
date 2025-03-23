@@ -13,23 +13,23 @@ export type Database = {
         Row: {
           id: string
           redeemed_at: string | null
-          reward_id: string
-          status: string
-          user_id: string
+          reward_id: string | null
+          status: string | null
+          user_id: string | null
         }
         Insert: {
-          id?: string
+          id: string
           redeemed_at?: string | null
-          reward_id: string
-          status?: string
-          user_id: string
+          reward_id?: string | null
+          status?: string | null
+          user_id?: string | null
         }
         Update: {
           id?: string
           redeemed_at?: string | null
-          reward_id?: string
-          status?: string
-          user_id?: string
+          reward_id?: string | null
+          status?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -56,7 +56,7 @@ export type Database = {
           active?: boolean | null
           created_at?: string | null
           description: string
-          id?: string
+          id: string
           image_url: string
           name: string
           points: number
@@ -80,21 +80,21 @@ export type Database = {
           created_at: string | null
           earned_at: string | null
           id: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           badge_name: string
           created_at?: string | null
           earned_at?: string | null
-          id?: string
-          user_id: string
+          id: string
+          user_id?: string | null
         }
         Update: {
           badge_name?: string
           created_at?: string | null
           earned_at?: string | null
           id?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -149,11 +149,11 @@ export type Database = {
           image_url: string | null
           location: Json
           reported_at: string | null
-          status: string
+          status: string | null
           type: string
           updated_at: string | null
           urgent: boolean | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           collected_at?: string | null
@@ -163,11 +163,11 @@ export type Database = {
           image_url?: string | null
           location: Json
           reported_at?: string | null
-          status?: string
+          status?: string | null
           type: string
           updated_at?: string | null
           urgent?: boolean | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           collected_at?: string | null
@@ -177,11 +177,11 @@ export type Database = {
           image_url?: string | null
           location?: Json
           reported_at?: string | null
-          status?: string
+          status?: string | null
           type?: string
           updated_at?: string | null
           urgent?: boolean | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -190,6 +190,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_demo_users: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       increment: {
         Args: {
           value: number

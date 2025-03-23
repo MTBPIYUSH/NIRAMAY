@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { UserProfile } from "@/types/database";
+import { useToast } from "@/components/ui/use-toast";
 
 type AuthContextType = {
   session: Session | null;
@@ -20,12 +21,12 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Changed from function declaration to arrow function to fix Fast Refresh error
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
   const fetchUserProfile = async (userId: string) => {
     try {
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             // First check if the user exists in auth.users
             const { data: userData, error: userError } =
-              await supabase.auth.getUser(userId);
+              await supabase.auth.getUser();
 
             if (userError) {
               console.error("Error getting user:", userError);
@@ -135,7 +136,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const initializeAuth = async () => {
       try {
         console.log("Initializing auth state...");
-        const { data } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
+
+        if (error) {
+          console.error("Error getting session:", error);
+          setLoading(false);
+          return;
+        }
+
         const initialSession = data.session;
         console.log("Initial session:", initialSession ? "Found" : "Not found");
 
@@ -177,19 +185,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("Auth state changed:", event, session?.user?.email);
-      setSession(session);
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
 
-      if (currentUser) {
-        try {
-          const profile = await fetchUserProfile(currentUser.id);
-          setUserProfile(profile);
-        } catch (error) {
-          console.error("Error fetching user profile on auth change:", error);
+      if (event === "SIGNED_IN") {
+        setSession(session);
+        setUser(session?.user ?? null);
+
+        if (session?.user) {
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            setUserProfile(profile);
+          } catch (error) {
+            console.error("Error fetching user profile on sign in:", error);
+          }
         }
-      } else {
+      } else if (event === "SIGNED_OUT") {
+        setSession(null);
+        setUser(null);
         setUserProfile(null);
+        console.log("User signed out");
+      } else if (event === "TOKEN_REFRESHED") {
+        setSession(session);
+      } else if (event === "USER_UPDATED") {
+        setSession(session);
+        setUser(session?.user ?? null);
       }
 
       setLoading(false);
@@ -203,18 +221,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     console.log("Signing in user:", email);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) {
-      console.error("Sign in error:", error);
-    } else {
+      if (error) {
+        console.error("Sign in error:", error);
+        toast({
+          variant: "destructive",
+          title: "Sign in failed",
+          description: error.message,
+        });
+        return { error };
+      }
+
       console.log("Sign in successful:", data.user?.email);
-    }
+      toast({
+        title: "Signed in successfully",
+        description: `Welcome back, ${data.user?.email}!`,
+      });
 
-    return { error };
+      // Manually update state to ensure it's set immediately
+      setSession(data.session);
+      setUser(data.user);
+
+      if (data.user) {
+        const profile = await fetchUserProfile(data.user.id);
+        setUserProfile(profile);
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      console.error("Exception during sign in:", err);
+      toast({
+        variant: "destructive",
+        title: "Sign in failed",
+        description: err.message || "An unexpected error occurred",
+      });
+      return { error: err };
+    }
   };
 
   const signUp = async (email: string, password: string) => {
@@ -230,39 +277,107 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error("Sign up error:", error);
+        toast({
+          variant: "destructive",
+          title: "Sign up failed",
+          description: error.message,
+        });
         return { data, error };
       }
 
       console.log("Sign up successful:", data.user?.email);
+      toast({
+        title: "Sign up successful",
+        description: "Please check your email for a confirmation link.",
+      });
 
       // We don't create the profile immediately after signup
       // because the user needs to confirm their email first
       // The profile will be created when they sign in after confirmation
 
       return { data, error: null };
-    } catch (err) {
+    } catch (err: any) {
       console.error("Exception during signup:", err);
+      toast({
+        variant: "destructive",
+        title: "Sign up failed",
+        description: err.message || "An unexpected error occurred",
+      });
       return { data: null, error: err };
     }
   };
 
   const signOut = async () => {
     console.log("Signing out user");
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
-    setUserProfile(null);
-    console.log("User signed out");
+    try {
+      const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        console.error("Sign out error:", error);
+        toast({
+          variant: "destructive",
+          title: "Sign out failed",
+          description: error.message,
+        });
+        return;
+      }
+
+      // Manually clear state to ensure it happens immediately
+      setUser(null);
+      setSession(null);
+      setUserProfile(null);
+
+      console.log("User signed out successfully");
+      toast({
+        title: "Signed out successfully",
+        description: "You have been logged out.",
+      });
+
+      // Force a page reload to clear any cached state
+      window.location.href = "/";
+    } catch (err: any) {
+      console.error("Exception during sign out:", err);
+      toast({
+        variant: "destructive",
+        title: "Sign out failed",
+        description: err.message || "An unexpected error occurred",
+      });
+    }
   };
 
   const signInWithGoogle = async () => {
     console.log("Initiating Google sign in");
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        console.error("Google sign in error:", error);
+        toast({
+          variant: "destructive",
+          title: "Google sign in failed",
+          description: error.message,
+        });
+      } else if (!data.url) {
+        console.error("Google sign in failed: No redirect URL");
+        toast({
+          variant: "destructive",
+          title: "Google sign in failed",
+          description: "Failed to get authentication URL",
+        });
+      }
+    } catch (err: any) {
+      console.error("Exception during Google sign in:", err);
+      toast({
+        variant: "destructive",
+        title: "Google sign in failed",
+        description: err.message || "An unexpected error occurred",
+      });
+    }
   };
 
   const value = {

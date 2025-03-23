@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useAuth } from "./auth-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Link } from "react-router-dom";
-import { LogOut, User, Settings, Award } from "lucide-react";
+import { LogOut, User, Settings, Award, Loader2 } from "lucide-react";
 
 export function UserAvatar() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, userProfile } = useAuth();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   if (!user) {
     return (
@@ -24,7 +26,18 @@ export function UserAvatar() {
   }
 
   const initials = user.email ? user.email.substring(0, 2).toUpperCase() : "U";
-  const avatarUrl = user.user_metadata?.avatar_url;
+  const avatarUrl = userProfile?.avatar_url || user.user_metadata?.avatar_url;
+
+  const handleSignOut = async () => {
+    setIsLoggingOut(true);
+    try {
+      await signOut();
+      // The redirect will happen in the auth provider
+    } catch (error) {
+      console.error("Error signing out:", error);
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <DropdownMenu>
@@ -59,17 +72,30 @@ export function UserAvatar() {
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link
-            to="/settings"
+            to="/dashboard"
             className="cursor-pointer w-full flex items-center"
           >
             <Settings className="mr-2 h-4 w-4" />
-            <span>Settings</span>
+            <span>Dashboard</span>
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => signOut()} className="cursor-pointer">
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
+        <DropdownMenuItem
+          onClick={handleSignOut}
+          className="cursor-pointer"
+          disabled={isLoggingOut}
+        >
+          {isLoggingOut ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Logging out...</span>
+            </>
+          ) : (
+            <>
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+            </>
+          )}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
