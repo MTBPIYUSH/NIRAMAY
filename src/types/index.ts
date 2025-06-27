@@ -1,0 +1,66 @@
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'citizen' | 'admin' | 'subworker';
+  points?: number;
+  location?: string;
+  ward?: string;
+  city?: string;
+}
+
+export interface Complaint {
+  id: string;
+  userId: string;
+  userName: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  location: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+  status: 'submitted' | 'assigned' | 'in-progress' | 'completed';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  assignedTo?: string;
+  assignedWorkerName?: string;
+  submittedAt: Date;
+  completedAt?: Date;
+  pointsAwarded?: number;
+}
+
+export interface SubWorker {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  status: 'available' | 'busy';
+  ward: string;
+  completedTasks: number;
+  rating: number;
+  currentTask?: string;
+}
+
+export interface EcoProduct {
+  id: string;
+  name: string;
+  description: string;
+  points: number;
+  image: string;
+  category: 'dustbins' | 'compost' | 'tools' | 'plants';
+  stock: number;
+}
+
+export interface Analytics {
+  totalComplaints: number;
+  resolvedComplaints: number;
+  activeWorkers: number;
+  averageResolutionTime: number;
+  cleanlinessIndex: number;
+  monthlyTrends: {
+    month: string;
+    complaints: number;
+    resolved: number;
+  }[];
+}
