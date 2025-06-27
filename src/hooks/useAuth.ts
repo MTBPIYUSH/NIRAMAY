@@ -11,14 +11,21 @@ export const useAuth = () => {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          setLoading(false);
+          return;
+        }
+
         setUser(session?.user ?? null);
         
         if (session?.user) {
           await fetchProfile(session.user.id);
         }
       } catch (error) {
-        console.error('Error getting session:', error);
+        console.error('Error in getInitialSession:', error);
       } finally {
         setLoading(false);
       }
@@ -29,6 +36,7 @@ export const useAuth = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.id);
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -54,12 +62,16 @@ export const useAuth = () => {
 
       if (error) {
         console.error('Error fetching profile:', error);
+        // If profile doesn't exist, that's okay - user might need to complete signup
+        if (error.code !== 'PGRST116') {
+          throw error;
+        }
         return;
       }
 
       setProfile(data);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error in fetchProfile:', error);
     }
   };
 
@@ -69,6 +81,7 @@ export const useAuth = () => {
     phone?: string;
   }) => {
     try {
+      // First, sign up the user
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -95,17 +108,19 @@ export const useAuth = () => {
               name: userData.name,
               aadhar: userData.aadhar,
               phone: userData.phone,
+              points: 0
             }
           ]);
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
-          throw profileError;
+          // Don't throw here - the user was created successfully
         }
       }
 
       return { data, error: null };
     } catch (error: any) {
+      console.error('SignUp error:', error);
       return { data: null, error };
     }
   };
@@ -121,6 +136,7 @@ export const useAuth = () => {
 
       return { data, error: null };
     } catch (error: any) {
+      console.error('SignIn error:', error);
       return { data: null, error };
     }
   };
@@ -135,6 +151,7 @@ export const useAuth = () => {
       
       return { error: null };
     } catch (error: any) {
+      console.error('SignOut error:', error);
       return { error };
     }
   };

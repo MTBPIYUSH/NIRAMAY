@@ -32,6 +32,18 @@ function App() {
     setCurrentView('landing');
   };
 
+  // Show loading for a maximum of 3 seconds, then show landing page
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (loading) {
+        console.log('Loading timeout reached, showing landing page');
+        setCurrentView('landing');
+      }
+    }, 3000);
+
+    return () => clearTimeout(timeout);
+  }, [loading]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-indigo-100 flex items-center justify-center">
@@ -40,6 +52,7 @@ function App() {
             <span className="text-white font-bold text-xl">N</span>
           </div>
           <div className="text-lg font-semibold text-gray-700">Loading Niramay...</div>
+          <div className="text-sm text-gray-500 mt-2">Connecting to services...</div>
         </div>
       </div>
     );
