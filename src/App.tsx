@@ -16,8 +16,11 @@ function App() {
     } else if (user && !profile) {
       // User exists but no profile - might be pending verification
       setCurrentView('auth');
+    } else if (!user && !loading) {
+      // No user and not loading - redirect to auth for re-authentication
+      setCurrentView('auth');
     }
-  }, [user, profile]);
+  }, [user, profile, loading]);
 
   const handleGetStarted = () => {
     setCurrentView('auth');
