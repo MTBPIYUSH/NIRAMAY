@@ -11,7 +11,13 @@ export const useAuth = () => {
     // Get initial session
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          throw error;
+        }
+        
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -19,6 +25,7 @@ export const useAuth = () => {
         }
       } catch (error) {
         console.error('Error getting session:', error);
+        // Don't throw here, just log the error
       } finally {
         setLoading(false);
       }
@@ -29,6 +36,8 @@ export const useAuth = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -69,6 +78,8 @@ export const useAuth = () => {
     phone: string;
   }) => {
     try {
+      console.log('Attempting to sign up user:', email);
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -82,10 +93,17 @@ export const useAuth = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Signup error:', error);
+        throw error;
+      }
+
+      console.log('Signup successful:', data);
 
       // Create profile after successful auth signup
       if (data.user) {
+        console.log('Creating profile for user:', data.user.id);
+        
         const { error: profileError } = await supabase
           .from('profiles')
           .insert([
@@ -102,25 +120,35 @@ export const useAuth = () => {
           console.error('Error creating profile:', profileError);
           throw profileError;
         }
+        
+        console.log('Profile created successfully');
       }
 
       return { data, error: null };
     } catch (error: any) {
+      console.error('SignUp error:', error);
       return { data: null, error };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('Attempting to sign in user:', email);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('SignIn error:', error);
+        throw error;
+      }
 
+      console.log('SignIn successful:', data);
       return { data, error: null };
     } catch (error: any) {
+      console.error('SignIn error:', error);
       return { data: null, error };
     }
   };
