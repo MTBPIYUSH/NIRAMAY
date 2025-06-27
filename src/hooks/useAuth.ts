@@ -10,14 +10,18 @@ export const useAuth = () => {
   useEffect(() => {
     // Get initial session
     const getInitialSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        await fetchProfile(session.user.id);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        }
+      } catch (error) {
+        console.error('Error getting session:', error);
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     };
 
     getInitialSession();
@@ -73,13 +77,14 @@ export const useAuth = () => {
             name: userData.name,
             aadhar: userData.aadhar,
             phone: userData.phone,
+            role: 'citizen'
           }
         }
       });
 
       if (error) throw error;
 
-      // Create profile
+      // Create profile after successful auth signup
       if (data.user) {
         const { error: profileError } = await supabase
           .from('profiles')
@@ -95,6 +100,7 @@ export const useAuth = () => {
 
         if (profileError) {
           console.error('Error creating profile:', profileError);
+          throw profileError;
         }
       }
 
@@ -111,15 +117,26 @@ export const useAuth = () => {
         password,
       });
 
-      return { data, error };
+      if (error) throw error;
+
+      return { data, error: null };
     } catch (error: any) {
       return { data: null, error };
     }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    return { error };
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+      
+      setUser(null);
+      setProfile(null);
+      
+      return { error: null };
+    } catch (error: any) {
+      return { error };
+    }
   };
 
   return {
