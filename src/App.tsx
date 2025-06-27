@@ -1,50 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LandingPage } from './components/LandingPage';
-import { AuthSelector } from './components/AuthSelector';
+import { AuthPage } from './components/AuthPage';
 import { CitizenDashboard } from './components/CitizenDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { SubWorkerDashboard } from './components/SubWorkerDashboard';
-import { mockUsers } from './data/mockData';
-
-type UserRole = 'citizen' | 'admin' | 'subworker';
+import { useAuth } from './hooks/useAuth';
 
 function App() {
   const [currentView, setCurrentView] = useState<'landing' | 'auth' | 'dashboard'>('landing');
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const { user, profile, loading, signOut } = useAuth();
+
+  useEffect(() => {
+    if (user && profile) {
+      setCurrentView('dashboard');
+    } else if (user && !profile) {
+      // User exists but no profile - might be pending verification
+      setCurrentView('auth');
+    }
+  }, [user, profile]);
 
   const handleGetStarted = () => {
     setCurrentView('auth');
   };
 
-  const handleRoleSelect = (role: UserRole) => {
-    const user = mockUsers.find(u => u.role === role);
-    setCurrentUser(user);
+  const handleAuthSuccess = () => {
     setCurrentView('dashboard');
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
+  const handleLogout = async () => {
+    await signOut();
     setCurrentView('landing');
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
+            <span className="text-white font-bold text-xl">N</span>
+          </div>
+          <div className="text-lg font-semibold text-gray-700">Loading Niramay...</div>
+        </div>
+      </div>
+    );
+  }
 
   if (currentView === 'landing') {
     return <LandingPage onGetStarted={handleGetStarted} />;
   }
 
   if (currentView === 'auth') {
-    return <AuthSelector onRoleSelect={handleRoleSelect} />;
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
   }
 
-  if (currentView === 'dashboard' && currentUser) {
-    switch (currentUser.role) {
+  if (currentView === 'dashboard' && profile) {
+    switch (profile.role) {
       case 'citizen':
-        return <CitizenDashboard user={currentUser} onLogout={handleLogout} />;
+        return <CitizenDashboard user={profile} onLogout={handleLogout} defaultTab="report" />;
       case 'admin':
-        return <AdminDashboard user={currentUser} onLogout={handleLogout} />;
+        return <AdminDashboard user={profile} onLogout={handleLogout} />;
       case 'subworker':
-        return <SubWorkerDashboard user={currentUser} onLogout={handleLogout} />;
+        return <SubWorkerDashboard user={profile} onLogout={handleLogout} />;
       default:
-        return <AuthSelector onRoleSelect={handleRoleSelect} />;
+        return <LandingPage onGetStarted={handleGetStarted} />;
     }
   }
 
