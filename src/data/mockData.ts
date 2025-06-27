@@ -1,4 +1,4 @@
-import { User, Complaint, SubWorker, EcoProduct, Analytics, LeaderboardEntry } from '../types';
+import { User, Complaint, SubWorker, EcoProduct, Analytics } from '../types';
 
 export const mockUsers: User[] = [
   {
@@ -154,24 +154,6 @@ export const mockEcoProducts: EcoProduct[] = [
     image: 'https://images.pexels.com/photos/1407305/pexels-photo-1407305.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'plants',
     stock: 30
-  },
-  {
-    id: '5',
-    name: 'Eco-Friendly Bags',
-    description: 'Reusable jute bags for shopping',
-    points: 150,
-    image: 'https://images.pexels.com/photos/1029896/pexels-photo-1029896.jpeg?auto=compress&cs=tinysrgb&w=400',
-    category: 'tools',
-    stock: 50
-  },
-  {
-    id: '6',
-    name: 'Solar LED Lights',
-    description: 'Solar-powered LED lights for gardens',
-    points: 350,
-    image: 'https://images.pexels.com/photos/1108572/pexels-photo-1108572.jpeg?auto=compress&cs=tinysrgb&w=400',
-    category: 'tools',
-    stock: 20
   }
 ];
 
@@ -190,46 +172,3 @@ export const mockAnalytics: Analytics = {
     { month: 'Jun', complaints: 158, resolved: 151 }
   ]
 };
-
-export const mockLeaderboard: LeaderboardEntry[] = [
-  {
-    id: '1',
-    name: 'Arjun Sharma',
-    points: 1250,
-    rank: 4,
-    city: 'Gurgaon',
-    reportsCount: 12
-  },
-  {
-    id: '2',
-    name: 'Priya Singh',
-    points: 1850,
-    rank: 1,
-    city: 'Gurgaon',
-    reportsCount: 18
-  },
-  {
-    id: '3',
-    name: 'Rajesh Kumar',
-    points: 1650,
-    rank: 2,
-    city: 'Gurgaon',
-    reportsCount: 15
-  },
-  {
-    id: '4',
-    name: 'Anita Verma',
-    points: 1450,
-    rank: 3,
-    city: 'Gurgaon',
-    reportsCount: 14
-  },
-  {
-    id: '5',
-    name: 'Vikram Joshi',
-    points: 1150,
-    rank: 5,
-    city: 'Gurgaon',
-    reportsCount: 11
-  }
-];
