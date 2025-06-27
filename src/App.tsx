@@ -19,18 +19,6 @@ function App() {
     }
   }, [user, profile]);
 
-  // Force show landing page after 2 seconds if still loading
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (loading) {
-        console.log('Loading timeout reached, forcing landing page');
-        setCurrentView('landing');
-      }
-    }, 2000);
-
-    return () => clearTimeout(timeout);
-  }, [loading]);
-
   const handleGetStarted = () => {
     setCurrentView('auth');
   };
@@ -44,8 +32,7 @@ function App() {
     setCurrentView('landing');
   };
 
-  // Show loading only for a brief moment
-  if (loading && currentView === 'landing') {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
@@ -53,7 +40,6 @@ function App() {
             <span className="text-white font-bold text-xl">N</span>
           </div>
           <div className="text-lg font-semibold text-gray-700">Loading Niramay...</div>
-          <div className="text-sm text-gray-500 mt-2">Initializing platform...</div>
         </div>
       </div>
     );
@@ -68,24 +54,13 @@ function App() {
   }
 
   if (currentView === 'dashboard' && profile) {
-    // Create mock user data if profile is missing
-    const mockProfile = profile || {
-      id: '1',
-      name: 'Demo User',
-      email: 'demo@example.com',
-      role: 'citizen' as const,
-      points: 1250,
-      ward: 'Ward 12',
-      city: 'Gurgaon'
-    };
-
-    switch (mockProfile.role) {
+    switch (profile.role) {
       case 'citizen':
-        return <CitizenDashboard user={mockProfile} onLogout={handleLogout} />;
+        return <CitizenDashboard user={profile} onLogout={handleLogout} />;
       case 'admin':
-        return <AdminDashboard user={mockProfile} onLogout={handleLogout} />;
+        return <AdminDashboard user={profile} onLogout={handleLogout} />;
       case 'subworker':
-        return <SubWorkerDashboard user={mockProfile} onLogout={handleLogout} />;
+        return <SubWorkerDashboard user={profile} onLogout={handleLogout} />;
       default:
         return <LandingPage onGetStarted={handleGetStarted} />;
     }
