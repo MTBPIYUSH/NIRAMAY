@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle, Navigation, Map, Route } from 'lucide-react';
+import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle, Navigation, Map as MapIcon, Route } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint, SubWorker } from '../types';
 import { 
@@ -534,7 +534,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                       onClick={() => openTaskDetail(assignedTasks[0])}
                       className="bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors flex items-center"
                     >
-                      <Map size={16} className="mr-2" />
+                      <MapIcon size={16} className="mr-2" />
                       View on Map
                     </button>
                     <button
@@ -840,7 +840,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                   ) : (
                     <div className="w-full h-96 bg-gray-100 rounded-xl flex items-center justify-center">
                       <div className="text-center">
-                        <Map size={48} className="text-gray-400 mx-auto mb-2" />
+                        <MapIcon size={48} className="text-gray-400 mx-auto mb-2" />
                         <p className="text-gray-500">Loading map...</p>
                       </div>
                     </div>
