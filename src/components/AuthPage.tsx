@@ -24,7 +24,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [selectedRole, setSelectedRole] = useState<'citizen' | 'admin' | 'subworker'>('citizen');
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -58,7 +57,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     },
     {
       id: 'subworker',
-      title: 'Municipal Worker',
+      title: 'Field Worker',
       description: 'Complete cleanup assignments',
       icon: HardHat,
       color: 'from-orange-400 to-red-600',
@@ -70,10 +69,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
   const validateAadhar = (aadhar: string) => {
     return /^\d{12}$/.test(aadhar);
-  };
-
-  const validatePhone = (phone: string) => {
-    return /^\d{10}$/.test(phone);
   };
 
   const validateEmail = (email: string) => {
@@ -91,23 +86,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         throw new Error('Please enter a valid email address');
       }
 
-      if (formData.password.length < 8) {
-        throw new Error('Password must be at least 8 characters long');
+      if (formData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
       }
 
       if (!isLogin) {
-        // Sign up validation (only for citizens)
+        // Sign up validation
         if (selectedRole === 'citizen') {
           if (!formData.name.trim()) {
-            throw new Error('Full name is required');
+            throw new Error('Name is required');
           }
 
           if (!validateAadhar(formData.aadhar)) {
-            throw new Error('Please enter a valid 12-digit Aadhaar number');
-          }
-
-          if (!validatePhone(formData.phone)) {
-            throw new Error('Please enter a valid 10-digit mobile number');
+            throw new Error('Please enter a valid 12-digit Aadhar number');
           }
 
           if (formData.password !== formData.confirmPassword) {
@@ -115,54 +106,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           }
 
           // Citizen sign up
-          console.log('Attempting citizen signup');
           const { data, error } = await signUp(formData.email, formData.password, {
             name: formData.name,
             aadhar: formData.aadhar,
             phone: formData.phone
           });
 
-          if (error) {
-            console.error('Signup error:', error);
-            throw error;
-          }
+          if (error) throw error;
 
-          console.log('Signup successful:', data);
           setMessage({
             type: 'success',
-            text: 'Account created successfully! Welcome to Niramay.'
+            text: 'Account created successfully! Please check your email to verify your account.'
           });
-
-          // Call onAuthSuccess after a short delay to show success message
-          setTimeout(() => {
-            onAuthSuccess();
-          }, 1500);
         }
       } else {
         // Sign in
-        console.log('Attempting signin for:', formData.email);
         const { data, error } = await signIn(formData.email, formData.password);
 
-        if (error) {
-          console.error('Signin error:', error);
-          throw error;
-        }
+        if (error) throw error;
 
         if (data.user) {
-          console.log('Signin successful for:', data.user.email);
-          setMessage({
-            type: 'success',
-            text: 'Login successful! Redirecting to dashboard...'
-          });
-
-          // Call onAuthSuccess after a short delay to show success message
-          setTimeout(() => {
-            onAuthSuccess();
-          }, 1000);
+          onAuthSuccess();
         }
       }
     } catch (error: any) {
-      console.error('Auth error:', error);
       setMessage({
         type: 'error',
         text: error.message || 'An error occurred. Please try again.'
@@ -176,13 +143,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setMessage(null);
   };
-
-  // Auto-switch to login when non-citizen role is selected
-  React.useEffect(() => {
-    if (selectedRole !== 'citizen') {
-      setIsLogin(true);
-    }
-  }, [selectedRole]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-orange-50 to-blue-50 flex items-center justify-center p-4">
@@ -287,7 +247,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </div>
             </div>
 
-            {/* Auth Toggle - Only show for citizens */}
+            {/* Auth Toggle */}
             {currentRole.canSignUp && (
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button
@@ -310,7 +270,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
-                  Register
+                  Sign Up
                 </button>
               </div>
             )}
@@ -333,7 +293,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Registration Fields - Only for citizens */}
+              {/* Sign Up Fields */}
               {!isLogin && selectedRole === 'citizen' && (
                 <>
                   <div>
@@ -352,7 +312,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Aadhaar Number *
+                      Aadhar Number *
                     </label>
                     <div className="relative">
                       <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -364,7 +324,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                           handleInputChange('aadhar', value);
                         }}
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        placeholder="Enter 12-digit Aadhaar number"
+                        placeholder="Enter 12-digit Aadhar number"
                         required
                       />
                     </div>
@@ -372,20 +332,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Mobile Number *
+                      Phone Number
                     </label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                       <input
                         type="tel"
                         value={formData.phone}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                          handleInputChange('phone', value);
-                        }}
+                        onChange={(e) => handleInputChange('phone', e.target.value)}
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        placeholder="Enter 10-digit mobile number"
-                        required
+                        placeholder="+91 98765 43210"
                       />
                     </div>
                   </div>
@@ -395,7 +351,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address *
+                  {selectedRole === 'citizen' ? 'Gmail Address *' : 'Email Address *'}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -404,7 +360,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder="your.email@domain.com"
+                    placeholder={selectedRole === 'citizen' ? 'your.email@gmail.com' : 'your.email@domain.com'}
                     required
                   />
                 </div>
@@ -435,7 +391,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 </div>
               </div>
 
-              {/* Confirm Password - Only for registration */}
+              {/* Confirm Password */}
               {!isLogin && selectedRole === 'citizen' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -444,20 +400,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                     <input
-                      type={showConfirmPassword ? 'text' : 'password'}
+                      type="password"
                       value={formData.confirmPassword}
                       onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                      className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                       placeholder="Confirm your password"
                       required
                     />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
                   </div>
                 </div>
               )}
@@ -479,26 +428,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </button>
             </form>
 
-            {/* Footer Notice for Admin/Worker */}
+            {/* Footer */}
             {!currentRole.canSignUp && (
               <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-                <div className="flex items-start text-yellow-800">
-                  <AlertCircle size={16} className="mr-2 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm">
-                    {selectedRole === 'admin' ? (
-                      <>
-                        <strong>Municipal Admin Portal:</strong> This portal is restricted to authorized municipal authorities. 
-                        Login credentials are pre-assigned by the system administrators. For access-related queries, 
-                        please contact technical support.
-                      </>
-                    ) : (
-                      <>
-                        <strong>Municipal Worker Portal:</strong> This login is exclusively for registered municipal workers. 
-                        Your credentials have been provided by your supervisor. If you haven't received your login details, 
-                        please contact your municipal authority.
-                      </>
-                    )}
-                  </div>
+                <div className="flex items-center text-yellow-800">
+                  <AlertCircle size={16} className="mr-2 flex-shrink-0" />
+                  <span className="text-sm">
+                    {selectedRole === 'admin' ? 'Admin' : 'Worker'} accounts are pre-approved. 
+                    Please use your provided credentials to sign in.
+                  </span>
                 </div>
               </div>
             )}
