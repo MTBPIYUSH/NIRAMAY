@@ -22,7 +22,8 @@ import {
   Eye,
   UserPlus,
   Phone,
-  Mail
+  Mail,
+  Shield
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
@@ -81,13 +82,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [workerFilter, setWorkerFilter] = useState<'all' | 'available' | 'busy' | 'offline'>('all');
-  const [debugInfo, setDebugInfo] = useState<any>(null);
 
+  // Verify admin access
   useEffect(() => {
-    console.log('🔄 AdminDashboard mounted for user:', user.id, 'role:', user.role);
+    if (user.role !== 'admin') {
+      console.error('❌ Unauthorized access attempt - user is not admin');
+      onLogout();
+      return;
+    }
+    
+    console.log('✅ Admin access verified for user:', user.id);
     fetchReports();
     fetchSubWorkers();
-  }, [user.id]);
+  }, [user.id, user.role]);
 
   const fetchReports = async () => {
     setLoadingReports(true);
@@ -102,7 +109,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
       if (reportsError) {
         console.error('❌ Error fetching reports:', reportsError);
-        setDebugInfo(prev => ({ ...prev, reportsError }));
         return;
       }
 
@@ -120,7 +126,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
         if (profilesError) {
           console.error('❌ Error fetching reporter profiles:', profilesError);
-          setDebugInfo(prev => ({ ...prev, profilesError }));
         } else {
           profilesData = profiles || [];
         }
@@ -157,11 +162,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       });
 
       setReports(convertedReports);
-      setDebugInfo(prev => ({ ...prev, reportsCount: convertedReports.length }));
 
     } catch (error) {
       console.error('❌ Error in fetchReports:', error);
-      setDebugInfo(prev => ({ ...prev, fetchError: error }));
     } finally {
       setLoadingReports(false);
     }
@@ -170,48 +173,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const fetchSubWorkers = async () => {
     setLoadingWorkers(true);
     try {
-      console.log('👷 Fetching subworkers...');
-      console.log('🏛️ Admin ward:', user.ward, 'assigned_ward:', user.assigned_ward);
+      console.log('👷 Fetching all subworker accounts...');
       
-      // First, let's get ALL subworker profiles to debug
-      const { data: allSubWorkers, error: allError } = await supabase
+      // Fetch all active subworker profiles
+      const { data: subWorkersData, error: subWorkersError } = await supabase
         .from('profiles')
         .select('*')
-        .eq('role', 'subworker');
-
-      console.log('🔍 All subworkers in database:', allSubWorkers?.length || 0);
-      console.log('📋 All subworkers data:', allSubWorkers);
-      
-      if (allError) {
-        console.error('❌ Error fetching all subworkers:', allError);
-        setDebugInfo(prev => ({ ...prev, allSubWorkersError: allError }));
-      }
-
-      // Now fetch subworkers for the admin's ward
-      let query = supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'subworker');
-
-      // Filter by ward if admin has a ward assigned
-      if (user.ward) {
-        query = query.or(`ward.eq.${user.ward},assigned_ward.eq.${user.ward}`);
-      } else if (user.assigned_ward) {
-        query = query.or(`ward.eq.${user.assigned_ward},assigned_ward.eq.${user.assigned_ward}`);
-      }
-
-      const { data: subWorkersData, error: subWorkersError } = await query.order('name');
+        .eq('role', 'subworker')
+        .neq('status', 'deleted') // Exclude any deleted/test accounts
+        .order('name');
 
       if (subWorkersError) {
         console.error('❌ Error fetching subworkers:', subWorkersError);
-        setDebugInfo(prev => ({ ...prev, subWorkersError }));
         return;
       }
 
-      console.log('✅ Filtered subworkers fetched:', subWorkersData?.length || 0);
-      console.log('📋 Filtered subworkers data:', subWorkersData);
+      console.log('✅ Subworkers fetched:', subWorkersData?.length || 0);
 
-      const workers: SubWorkerProfile[] = (subWorkersData || []).map(worker => ({
+      // Filter out any test or debug entries based on naming patterns
+      const filteredWorkers = (subWorkersData || []).filter(worker => {
+        // Exclude test accounts or debug entries
+        const isTestAccount = worker.name?.toLowerCase().includes('test') ||
+                             worker.name?.toLowerCase().includes('debug') ||
+                             worker.name?.toLowerCase().includes('demo') ||
+                             worker.email?.toLowerCase().includes('test') ||
+                             worker.email?.toLowerCase().includes('debug');
+        
+        // Only include workers with proper names
+        const hasValidName = worker.name && worker.name.trim().length > 0;
+        
+        return !isTestAccount && hasValidName;
+      });
+
+      const workers: SubWorkerProfile[] = filteredWorkers.map(worker => ({
         id: worker.id,
         name: worker.name,
         phone: worker.phone,
@@ -227,18 +221,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       }));
 
       setSubWorkers(workers);
-      setDebugInfo(prev => ({ 
-        ...prev, 
-        workersCount: workers.length,
-        allSubWorkersCount: allSubWorkers?.length || 0,
-        adminWard: user.ward,
-        adminAssignedWard: user.assigned_ward,
-        workerWards: workers.map(w => ({ id: w.id, name: w.name, ward: w.ward, assigned_ward: w.assigned_ward }))
-      }));
 
     } catch (error) {
       console.error('❌ Error in fetchSubWorkers:', error);
-      setDebugInfo(prev => ({ ...prev, fetchWorkersError: error }));
     } finally {
       setLoadingWorkers(false);
     }
@@ -318,7 +303,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     const matchesStatus = workerFilter === 'all' || worker.status === workerFilter;
     const matchesSearch = searchTerm === '' || 
       worker.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (worker.ward && worker.ward.toLowerCase().includes(searchTerm.toLowerCase()));
+      (worker.ward && worker.ward.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (worker.assigned_ward && worker.assigned_ward.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesStatus && matchesSearch;
   });
 
@@ -331,6 +317,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     busyWorkers: subWorkers.filter(w => w.status === 'busy').length,
     totalWorkers: subWorkers.length
   };
+
+  // Show access denied if not admin
+  if (user.role !== 'admin') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 via-orange-50 to-yellow-100 flex items-center justify-center">
+        <div className="bg-white rounded-3xl p-12 shadow-2xl border border-red-200 text-center max-w-md">
+          <Shield size={64} className="text-red-500 mx-auto mb-6" />
+          <h2 className="text-2xl font-bold text-red-800 mb-4">Access Denied</h2>
+          <p className="text-red-600 mb-6">This dashboard is restricted to authorized administrators only.</p>
+          <button
+            onClick={onLogout}
+            className="px-6 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+          >
+            Return to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100">
@@ -415,45 +420,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             );
           })}
         </div>
-
-        {/* Debug Information Panel (only show if there are issues) */}
-        {debugInfo && (activeTab === 'workers' || activeTab === 'dashboard') && (
-          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-yellow-800">🔍 Debug Information</h3>
-              <button
-                onClick={() => setDebugInfo(null)}
-                className="text-yellow-600 hover:text-yellow-800"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            <div className="text-sm text-yellow-700 space-y-2">
-              <p><strong>Admin Ward:</strong> {debugInfo.adminWard || 'Not set'}</p>
-              <p><strong>Admin Assigned Ward:</strong> {debugInfo.adminAssignedWard || 'Not set'}</p>
-              <p><strong>Total SubWorkers in DB:</strong> {debugInfo.allSubWorkersCount || 0}</p>
-              <p><strong>Filtered Workers for Admin:</strong> {debugInfo.workersCount || 0}</p>
-              <p><strong>Reports Count:</strong> {debugInfo.reportsCount || 0}</p>
-              {debugInfo.workerWards && (
-                <div>
-                  <strong>Worker Ward Assignments:</strong>
-                  <ul className="ml-4 mt-1">
-                    {debugInfo.workerWards.map((w: any) => (
-                      <li key={w.id} className="text-xs">
-                        {w.name}: ward={w.ward || 'none'}, assigned_ward={w.assigned_ward || 'none'}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {(debugInfo.subWorkersError || debugInfo.allSubWorkersError) && (
-                <p className="text-red-600">
-                  <strong>Error:</strong> {JSON.stringify(debugInfo.subWorkersError || debugInfo.allSubWorkersError)}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Dashboard Overview */}
         {activeTab === 'dashboard' && (
@@ -574,7 +540,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                   <div className="text-center py-8">
                     <Users size={48} className="text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-500 mb-2">No workers found</p>
-                    <p className="text-xs text-gray-400">Check ward assignments or create worker accounts</p>
+                    <p className="text-xs text-gray-400">Contact system administrator to create worker accounts</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -729,7 +695,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {activeTab === 'workers' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <h2 className="text-3xl font-bold text-gray-800">Workers Management</h2>
+              <h2 className="text-3xl font-bold text-gray-800">SubWorker Accounts</h2>
               
               <div className="flex gap-3">
                 <div className="relative">
@@ -771,10 +737,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             ) : filteredWorkers.length === 0 ? (
               <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
                 <Users size={64} className="text-gray-400 mx-auto mb-6" />
-                <h3 className="text-2xl font-bold text-gray-600 mb-4">No workers found</h3>
+                <h3 className="text-2xl font-bold text-gray-600 mb-4">No SubWorker Accounts Found</h3>
                 <p className="text-gray-500 mb-4">
                   {subWorkers.length === 0 
-                    ? "No subworker accounts exist in your ward. Contact system administrator to create worker accounts."
+                    ? "No subworker accounts exist in the system. Contact system administrator to create worker accounts."
                     : "No workers match your current filters."
                   }
                 </p>
@@ -784,7 +750,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                     <ol className="text-sm text-blue-700 space-y-1">
                       <li>1. Contact system administrator</li>
                       <li>2. Provide worker details (name, phone, email)</li>
-                      <li>3. Assign workers to ward: {user.ward || user.assigned_ward || 'your ward'}</li>
+                      <li>3. Assign workers to appropriate wards</li>
                       <li>4. Workers will receive login credentials</li>
                     </ol>
                   </div>
@@ -792,16 +758,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
               </div>
             ) : (
               <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+                <div className="bg-gray-50 px-6 py-4 border-b border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-800">Active SubWorker Accounts</h3>
+                    <span className="text-sm text-gray-600">
+                      {filteredWorkers.length} of {subWorkers.length} workers
+                    </span>
+                  </div>
+                </div>
+                
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Worker</th>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Contact</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Ward</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Ward Assignment</th>
                         <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Tasks</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Joined</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Performance</th>
+                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Account Created</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -835,9 +810,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="text-sm text-gray-600">
-                              {worker.ward || worker.assigned_ward || 'Not assigned'}
-                            </span>
+                            <div className="space-y-1">
+                              {worker.ward && (
+                                <div className="text-sm text-gray-600">
+                                  <span className="font-medium">Ward:</span> {worker.ward}
+                                </div>
+                              )}
+                              {worker.assigned_ward && (
+                                <div className="text-sm text-gray-600">
+                                  <span className="font-medium">Assigned:</span> {worker.assigned_ward}
+                                </div>
+                              )}
+                              {!worker.ward && !worker.assigned_ward && (
+                                <span className="text-sm text-gray-400">Not assigned</span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getWorkerStatusColor(worker.status)}`}>
@@ -847,7 +834,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                           <td className="px-6 py-4">
                             <div className="text-sm">
                               <div className="font-medium text-gray-800">{worker.task_completion_count}</div>
-                              <div className="text-gray-500">completed</div>
+                              <div className="text-gray-500">tasks completed</div>
                             </div>
                           </td>
                           <td className="px-6 py-4">
