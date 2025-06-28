@@ -16,8 +16,8 @@ import {
   Bell,
   Activity
 } from 'lucide-react';
-import { runHealthCheck, runDataIntegrityCheck, autoFixIntegrityIssues } from '../lib/databaseAnalysis';
-import { runDataIntegrityCheck as runIntegrityCheck, IntegrityCheckResult } from '../lib/dataIntegrityService';
+import { runHealthCheck } from '../lib/databaseAnalysis';
+import { runDataIntegrityCheck as runIntegrityCheck, IntegrityCheckResult, autoFixIntegrityIssues } from '../lib/dataIntegrityService';
 
 interface DatabaseHealthDashboardProps {
   onClose: () => void;
