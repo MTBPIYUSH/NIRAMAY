@@ -27,6 +27,13 @@ import {
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
+import { WorkerAssignmentInterface } from './WorkerAssignmentInterface';
+import { 
+  SubWorkerProfile,
+  fetchSubWorkers,
+  subscribeToSubWorkers,
+  getSubWorkerStats
+} from '../lib/subworkerService';
 
 interface AdminDashboardProps {
   user: Profile;
@@ -49,25 +56,15 @@ interface DatabaseReport {
   ai_analysis?: any;
 }
 
-interface SubWorkerProfile {
-  id: string;
-  name: string;
-  phone?: string;
-  email?: string;
-  status: 'available' | 'busy' | 'offline';
-  ward?: string;
-  city?: string;
-  assigned_ward?: string;
-  current_task_id?: string;
-  task_completion_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
 interface ReporterProfile {
   id: string;
   name: string;
   phone?: string;
+}
+
+interface TaskAssignmentModal {
+  isOpen: boolean;
+  report: Complaint | null;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
@@ -78,10 +75,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [reporterProfiles, setReporterProfiles] = useState<globalThis.Map<string, ReporterProfile>>(new globalThis.Map());
   const [loadingReports, setLoadingReports] = useState(false);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
-  const [assigningTask, setAssigningTask] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [workerFilter, setWorkerFilter] = useState<'all' | 'available' | 'busy' | 'offline'>('all');
+  const [taskAssignmentModal, setTaskAssignmentModal] = useState<TaskAssignmentModal>({
+    isOpen: false,
+    report: null
+  });
 
   // Verify admin access
   useEffect(() => {
@@ -93,8 +93,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     
     console.log('✅ Admin access verified for user:', user.id);
     fetchReports();
-    fetchSubWorkers();
+    loadSubWorkers();
   }, [user.id, user.role]);
+
+  // Set up real-time worker updates
+  useEffect(() => {
+    const subscription = subscribeToSubWorkers(
+      (updatedWorkers) => {
+        setSubWorkers(updatedWorkers);
+      },
+      (error) => {
+        console.error('Real-time worker subscription error:', error);
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const fetchReports = async () => {
     setLoadingReports(true);
@@ -170,106 +186,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
-  const fetchSubWorkers = async () => {
+  const loadSubWorkers = async () => {
     setLoadingWorkers(true);
     try {
-      console.log('👷 Fetching all subworker accounts...');
-      
-      // Fetch all active subworker profiles
-      const { data: subWorkersData, error: subWorkersError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'subworker')
-        .neq('status', 'deleted') // Exclude any deleted/test accounts
-        .order('name');
-
-      if (subWorkersError) {
-        console.error('❌ Error fetching subworkers:', subWorkersError);
-        return;
-      }
-
-      console.log('✅ Subworkers fetched:', subWorkersData?.length || 0);
-
-      // Filter out any test or debug entries based on naming patterns
-      const filteredWorkers = (subWorkersData || []).filter(worker => {
-        // Exclude test accounts or debug entries
-        const isTestAccount = worker.name?.toLowerCase().includes('test') ||
-                             worker.name?.toLowerCase().includes('debug') ||
-                             worker.name?.toLowerCase().includes('demo') ||
-                             worker.email?.toLowerCase().includes('test') ||
-                             worker.email?.toLowerCase().includes('debug');
-        
-        // Only include workers with proper names
-        const hasValidName = worker.name && worker.name.trim().length > 0;
-        
-        return !isTestAccount && hasValidName;
-      });
-
-      const workers: SubWorkerProfile[] = filteredWorkers.map(worker => ({
-        id: worker.id,
-        name: worker.name,
-        phone: worker.phone,
-        email: worker.email,
-        status: worker.status || 'available',
-        ward: worker.ward,
-        city: worker.city,
-        assigned_ward: worker.assigned_ward,
-        current_task_id: worker.current_task_id,
-        task_completion_count: worker.task_completion_count || 0,
-        created_at: worker.created_at,
-        updated_at: worker.updated_at
-      }));
-
+      const workers = await fetchSubWorkers();
       setSubWorkers(workers);
-
     } catch (error) {
-      console.error('❌ Error in fetchSubWorkers:', error);
+      console.error('❌ Error loading subworkers:', error);
     } finally {
       setLoadingWorkers(false);
     }
   };
 
-  const assignTaskToWorker = async (reportId: string, workerId: string) => {
-    setAssigningTask(reportId);
-    try {
-      console.log('📋 Assigning task:', reportId, 'to worker:', workerId);
+  const openTaskAssignment = (report: Complaint) => {
+    setTaskAssignmentModal({ isOpen: true, report });
+  };
 
-      const { error } = await supabase
-        .from('reports')
-        .update({
-          assigned_to: workerId,
-          status: 'assigned'
-        })
-        .eq('id', reportId);
-
-      if (error) {
-        console.error('❌ Error assigning task:', error);
-        alert('Failed to assign task. Please try again.');
-        return;
-      }
-
-      // Update worker status to busy
-      await supabase
-        .from('profiles')
-        .update({
-          status: 'busy',
-          current_task_id: reportId
-        })
-        .eq('id', workerId);
-
-      console.log('✅ Task assigned successfully');
-      
-      // Refresh data
-      await Promise.all([fetchReports(), fetchSubWorkers()]);
-      
-      alert('Task assigned successfully!');
-
-    } catch (error) {
-      console.error('❌ Error in assignTaskToWorker:', error);
-      alert('Failed to assign task. Please try again.');
-    } finally {
-      setAssigningTask(null);
-    }
+  const handleAssignmentComplete = async (workerId: string) => {
+    setTaskAssignmentModal({ isOpen: false, report: null });
+    
+    // Refresh data
+    await Promise.all([fetchReports(), loadSubWorkers()]);
   };
 
   const getStatusColor = (status: string) => {
@@ -313,9 +250,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     pendingReports: reports.filter(r => r.status === 'submitted').length,
     assignedReports: reports.filter(r => r.status === 'assigned').length,
     completedReports: reports.filter(r => r.status === 'completed').length,
-    availableWorkers: subWorkers.filter(w => w.status === 'available').length,
-    busyWorkers: subWorkers.filter(w => w.status === 'busy').length,
-    totalWorkers: subWorkers.length
+    ...getSubWorkerStats(subWorkers)
   };
 
   // Show access denied if not admin
@@ -356,7 +291,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             <div className="flex items-center space-x-4">
               <div className="hidden sm:flex items-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-4 py-2 rounded-full shadow-lg">
                 <Users size={18} className="mr-2" />
-                <span className="font-bold">{stats.totalWorkers}</span>
+                <span className="font-bold">{stats.total}</span>
                 <span className="text-xs ml-1 opacity-90">workers</span>
               </div>
 
@@ -400,7 +335,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           {[
             { id: 'dashboard', label: 'Dashboard', icon: TrendingUp },
             { id: 'reports', label: `Reports (${stats.totalReports})`, icon: Clock },
-            { id: 'workers', label: `Workers (${stats.totalWorkers})`, icon: Users },
+            { id: 'workers', label: `Workers (${stats.total})`, icon: Users },
             { id: 'analytics', label: 'Analytics', icon: TrendingUp }
           ].map(tab => {
             const Icon = tab.icon;
@@ -454,7 +389,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Available Workers</p>
-                    <p className="text-3xl font-bold text-gray-900">{stats.availableWorkers}</p>
+                    <p className="text-3xl font-bold text-gray-900">{stats.available}</p>
                   </div>
                   <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center">
                     <UserCheck className="text-green-600" size={28} />
@@ -514,54 +449,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                             {report.status}
                           </span>
                         </div>
+                        {report.status === 'submitted' && (
+                          <button
+                            onClick={() => openTaskAssignment(report)}
+                            className="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs hover:bg-blue-600 transition-colors"
+                          >
+                            Assign
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Worker Status */}
-              <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-2xl font-bold text-gray-800">Worker Status</h3>
-                  <button
-                    onClick={() => setActiveTab('workers')}
-                    className="text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Manage Workers
-                  </button>
-                </div>
-                
-                {loadingWorkers ? (
-                  <div className="flex justify-center py-8">
-                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  </div>
-                ) : subWorkers.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Users size={48} className="text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-2">No workers found</p>
-                    <p className="text-xs text-gray-400">Contact system administrator to create worker accounts</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {subWorkers.slice(0, 4).map(worker => (
-                      <div key={worker.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-600 rounded-lg flex items-center justify-center">
-                            <User size={16} className="text-white" />
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-gray-800">{worker.name}</h4>
-                            <p className="text-sm text-gray-600">{worker.ward || worker.assigned_ward || 'No ward'}</p>
-                          </div>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getWorkerStatusColor(worker.status)}`}>
-                          {worker.status}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              {/* Worker Assignment Interface */}
+              <div>
+                <WorkerAssignmentInterface
+                  showAssignmentActions={false}
+                />
               </div>
             </div>
           </div>
@@ -649,37 +555,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                             Submitted: {report.submittedAt.toLocaleDateString()}
                           </span>
                           
-                          {report.status === 'submitted' && stats.availableWorkers > 0 && (
-                            <div className="flex items-center gap-3">
-                              <select
-                                onChange={(e) => {
-                                  if (e.target.value) {
-                                    assignTaskToWorker(report.id, e.target.value);
-                                  }
-                                }}
-                                disabled={assigningTask === report.id}
-                                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                              >
-                                <option value="">Assign to worker...</option>
-                                {subWorkers
-                                  .filter(w => w.status === 'available')
-                                  .map(worker => (
-                                    <option key={worker.id} value={worker.id}>
-                                      {worker.name} ({worker.ward || worker.assigned_ward})
-                                    </option>
-                                  ))}
-                              </select>
-                              
-                              {assigningTask === report.id && (
-                                <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                              )}
-                            </div>
-                          )}
-                          
-                          {report.status === 'submitted' && stats.availableWorkers === 0 && (
-                            <span className="text-sm text-red-600 bg-red-50 px-3 py-1 rounded-full">
-                              No available workers
-                            </span>
+                          {report.status === 'submitted' && (
+                            <button
+                              onClick={() => openTaskAssignment(report)}
+                              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center"
+                            >
+                              <UserPlus size={16} className="mr-2" />
+                              Assign Worker
+                            </button>
                           )}
                         </div>
                       </div>
@@ -695,33 +578,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {activeTab === 'workers' && (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <h2 className="text-3xl font-bold text-gray-800">SubWorker Accounts</h2>
+              <h2 className="text-3xl font-bold text-gray-800">SubWorker Management</h2>
               
               <div className="flex gap-3">
-                <div className="relative">
-                  <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search workers..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                
-                <select
-                  value={workerFilter}
-                  onChange={(e) => setWorkerFilter(e.target.value as 'all' | 'available' | 'busy' | 'offline')}
-                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="all">All Workers</option>
-                  <option value="available">Available</option>
-                  <option value="busy">Busy</option>
-                  <option value="offline">Offline</option>
-                </select>
-                
                 <button
-                  onClick={fetchSubWorkers}
+                  onClick={loadSubWorkers}
                   className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center"
                 >
                   <RefreshCw size={16} className="mr-2" />
@@ -730,125 +591,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
               </div>
             </div>
             
-            {loadingWorkers ? (
-              <div className="flex justify-center py-12">
-                <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              </div>
-            ) : filteredWorkers.length === 0 ? (
-              <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
-                <Users size={64} className="text-gray-400 mx-auto mb-6" />
-                <h3 className="text-2xl font-bold text-gray-600 mb-4">No SubWorker Accounts Found</h3>
-                <p className="text-gray-500 mb-4">
-                  {subWorkers.length === 0 
-                    ? "No subworker accounts exist in the system. Contact system administrator to create worker accounts."
-                    : "No workers match your current filters."
-                  }
-                </p>
-                {subWorkers.length === 0 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left">
-                    <h4 className="font-semibold text-blue-800 mb-2">To add workers:</h4>
-                    <ol className="text-sm text-blue-700 space-y-1">
-                      <li>1. Contact system administrator</li>
-                      <li>2. Provide worker details (name, phone, email)</li>
-                      <li>3. Assign workers to appropriate wards</li>
-                      <li>4. Workers will receive login credentials</li>
-                    </ol>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
-                <div className="bg-gray-50 px-6 py-4 border-b border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-gray-800">Active SubWorker Accounts</h3>
-                    <span className="text-sm text-gray-600">
-                      {filteredWorkers.length} of {subWorkers.length} workers
-                    </span>
-                  </div>
-                </div>
-                
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Worker</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Contact</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Ward Assignment</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Status</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Performance</th>
-                        <th className="px-6 py-4 text-left text-sm font-semibold text-gray-600">Account Created</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {filteredWorkers.map(worker => (
-                        <tr key={worker.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-600 rounded-lg flex items-center justify-center">
-                                <User size={16} className="text-white" />
-                              </div>
-                              <div>
-                                <h4 className="font-semibold text-gray-800">{worker.name}</h4>
-                                <p className="text-sm text-gray-500">ID: {worker.id.slice(0, 8)}...</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              {worker.phone && (
-                                <div className="flex items-center text-sm text-gray-600">
-                                  <Phone size={14} className="mr-2" />
-                                  {worker.phone}
-                                </div>
-                              )}
-                              {worker.email && (
-                                <div className="flex items-center text-sm text-gray-600">
-                                  <Mail size={14} className="mr-2" />
-                                  {worker.email}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="space-y-1">
-                              {worker.ward && (
-                                <div className="text-sm text-gray-600">
-                                  <span className="font-medium">Ward:</span> {worker.ward}
-                                </div>
-                              )}
-                              {worker.assigned_ward && (
-                                <div className="text-sm text-gray-600">
-                                  <span className="font-medium">Assigned:</span> {worker.assigned_ward}
-                                </div>
-                              )}
-                              {!worker.ward && !worker.assigned_ward && (
-                                <span className="text-sm text-gray-400">Not assigned</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getWorkerStatusColor(worker.status)}`}>
-                              {worker.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="text-sm">
-                              <div className="font-medium text-gray-800">{worker.task_completion_count}</div>
-                              <div className="text-gray-500">tasks completed</div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-sm text-gray-500">
-                              {new Date(worker.created_at).toLocaleDateString()}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+            <WorkerAssignmentInterface showAssignmentActions={false} />
           </div>
         )}
 
@@ -870,7 +613,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600">Worker Utilization</span>
                     <span className="font-bold text-blue-600">
-                      {stats.totalWorkers > 0 ? Math.round((stats.busyWorkers / stats.totalWorkers) * 100) : 0}%
+                      {stats.total > 0 ? Math.round((stats.busy / stats.total) * 100) : 0}%
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -894,7 +637,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                     <span className="text-gray-600">Worker Availability</span>
                     <span className="flex items-center text-green-600">
                       <UserCheck size={16} className="mr-1" />
-                      {stats.availableWorkers} Available
+                      {stats.available} Available
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -910,6 +653,59 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </div>
         )}
       </div>
+
+      {/* Task Assignment Modal */}
+      {taskAssignmentModal.isOpen && taskAssignmentModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Assign Task to Worker</h3>
+              <button
+                onClick={() => setTaskAssignmentModal({ isOpen: false, report: null })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Report Details */}
+              <div className="space-y-4">
+                <h4 className="font-semibold text-gray-800 mb-3">Report Details</h4>
+                <img
+                  src={taskAssignmentModal.report.imageUrl}
+                  alt="Report"
+                  className="w-full h-48 object-cover rounded-xl"
+                />
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-sm text-gray-600 mb-1">
+                    <span className="font-medium">Reporter:</span> {taskAssignmentModal.report.userName}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-1">
+                    <span className="font-medium">Contact:</span> {taskAssignmentModal.report.userPhone}
+                  </p>
+                  <p className="text-sm text-gray-600 mb-1">
+                    <span className="font-medium">Location:</span> {taskAssignmentModal.report.location.address}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <span className="font-medium">Submitted:</span> {taskAssignmentModal.report.submittedAt.toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Worker Assignment */}
+              <div>
+                <WorkerAssignmentInterface
+                  reportId={taskAssignmentModal.report.id}
+                  reportWard={taskAssignmentModal.report.ward}
+                  onAssignmentComplete={handleAssignmentComplete}
+                  showAssignmentActions={true}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Click outside to close dropdown */}
       {showUserDropdown && (
