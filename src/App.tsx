@@ -9,53 +9,51 @@ import { useAuth } from './hooks/useAuth';
 function App() {
   const [currentView, setCurrentView] = useState<'landing' | 'auth' | 'dashboard'>('landing');
   const { user, profile, loading, signOut } = useAuth();
-  const [appReady, setAppReady] = useState(false);
+  const [appInitialized, setAppInitialized] = useState(false);
 
+  // Handle view changes based on auth state
   useEffect(() => {
-    // Add a small delay to ensure proper initialization
-    const timer = setTimeout(() => {
-      setAppReady(true);
-    }, 100);
+    // Wait for auth to initialize
+    if (loading) return;
 
-    return () => clearTimeout(timer);
-  }, []);
+    console.log('🔄 App state update - User:', !!user, 'Profile:', !!profile, 'Role:', profile?.role);
 
-  useEffect(() => {
-    if (!appReady) return;
-
-    console.log('App useEffect - user:', user?.id, 'profile:', profile?.id, 'loading:', loading);
-    
     if (user && profile) {
-      console.log('User and profile found, setting dashboard view');
+      console.log('✅ User authenticated with profile, redirecting to dashboard');
       setCurrentView('dashboard');
-    } else if (user && !profile && !loading) {
-      console.log('User found but no profile, staying on auth view');
-      // User exists but no profile - might be pending verification
+    } else if (user && !profile) {
+      console.log('⚠️ User authenticated but no profile found, staying on auth');
       setCurrentView('auth');
-    } else if (!user && !loading) {
-      console.log('No user and not loading, setting landing view');
+    } else {
+      console.log('ℹ️ No authenticated user, showing landing page');
       setCurrentView('landing');
     }
-  }, [user, profile, loading, appReady]);
+
+    setAppInitialized(true);
+  }, [user, profile, loading]);
 
   const handleGetStarted = () => {
-    console.log('Get started clicked, setting auth view');
+    console.log('🚀 Get started clicked');
     setCurrentView('auth');
   };
 
   const handleAuthSuccess = () => {
-    console.log('Auth success, setting dashboard view');
-    setCurrentView('dashboard');
+    console.log('✅ Auth success callback');
+    // Don't manually set view here - let useEffect handle it based on auth state
   };
 
   const handleLogout = async () => {
-    console.log('Logout clicked');
-    setCurrentView('landing');
-    await signOut();
+    console.log('👋 Logout initiated');
+    try {
+      await signOut();
+      setCurrentView('landing');
+    } catch (error) {
+      console.error('❌ Logout error:', error);
+    }
   };
 
-  // Show loading screen while app is initializing
-  if (!appReady || loading) {
+  // Show loading screen while initializing
+  if (!appInitialized || loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
@@ -64,11 +62,15 @@ function App() {
           </div>
           <div className="text-lg font-semibold text-gray-700 mb-2">Loading Niramay...</div>
           <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <div className="text-sm text-gray-500 mt-4">
+            {loading ? 'Checking authentication...' : 'Initializing app...'}
+          </div>
         </div>
       </div>
     );
   }
 
+  // Render appropriate view
   if (currentView === 'landing') {
     return <LandingPage onGetStarted={handleGetStarted} />;
   }
@@ -78,6 +80,8 @@ function App() {
   }
 
   if (currentView === 'dashboard' && profile) {
+    console.log('🎯 Rendering dashboard for role:', profile.role);
+    
     switch (profile.role) {
       case 'citizen':
         return <CitizenDashboard user={profile} onLogout={handleLogout} />;
@@ -86,10 +90,13 @@ function App() {
       case 'subworker':
         return <SubWorkerDashboard user={profile} onLogout={handleLogout} />;
       default:
+        console.error('❌ Unknown user role:', profile.role);
         return <LandingPage onGetStarted={handleGetStarted} />;
     }
   }
 
+  // Fallback
+  console.log('⚠️ Fallback to landing page');
   return <LandingPage onGetStarted={handleGetStarted} />;
 }
 

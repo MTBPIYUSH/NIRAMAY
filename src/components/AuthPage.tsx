@@ -114,7 +114,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           }
 
           // Citizen sign up
-          console.log('Starting citizen signup...');
+          console.log('🔐 Starting citizen signup...');
           const { data, error } = await signUp(formData.email, formData.password, {
             name: formData.name,
             aadhar: formData.aadhar,
@@ -122,33 +122,47 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           });
 
           if (error) {
-            console.error('Signup error:', error);
+            console.error('❌ Signup error:', error);
             throw error;
           }
 
-          console.log('Signup successful:', data);
+          console.log('✅ Signup successful:', data);
           setMessage({
             type: 'success',
             text: 'Account created successfully! Please check your email to verify your account.'
           });
+          
+          // Auto-switch to login after successful signup
+          setTimeout(() => {
+            setIsLogin(true);
+            setMessage(null);
+          }, 3000);
         }
       } else {
         // Sign in
-        console.log('Starting signin...');
+        console.log('🔐 Starting signin...');
         const { data, error } = await signIn(formData.email, formData.password);
 
         if (error) {
-          console.error('Signin error:', error);
+          console.error('❌ Signin error:', error);
           throw error;
         }
 
-        console.log('Signin successful:', data);
+        console.log('✅ Signin successful:', data);
+        
+        // Show success message briefly before redirect
+        setMessage({
+          type: 'success',
+          text: 'Login successful! Redirecting to dashboard...'
+        });
 
-        // Call onAuthSuccess after successful sign-in
-        onAuthSuccess();
+        // Call onAuthSuccess after a brief delay to show success message
+        setTimeout(() => {
+          onAuthSuccess();
+        }, 1000);
       }
     } catch (error: unknown) {
-      console.error('Form submission error:', error);
+      console.error('❌ Form submission error:', error);
       setMessage({
         type: 'error',
         text: error instanceof Error ? error.message : 'An error occurred. Please try again.'
@@ -476,8 +490,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <AlertCircle size={16} className="mr-2 flex-shrink-0 mt-0.5" />
                   <span className="text-sm">
                     {selectedRole === 'admin' 
-                      ? 'This portal is restricted to authorized municipal authorities. Login credentials are pre-assigned by the system administrators. For access-related queries, please contact technical support.'
-                      : 'This login is exclusively for registered municipal workers. Your credentials have been provided by your supervisor. If you haven\'t received your login details, please contact your municipal authority.'
+                      ? 'This portal is restricted to authorized municipal authorities. Login credentials are pre-assigned by the system administrators.'
+                      : 'This login is exclusively for registered municipal workers. Your credentials have been provided by your supervisor.'
                     }
                   </span>
                 </div>
