@@ -341,7 +341,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                 return (
                   <button
                     key={role.id}
-                    onClick={() => setActiveRole(role.id as any)}
+                    onClick={() => setActiveRole(role.id as 'citizen' | 'admin' | 'worker')}
                     className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all ${
                       activeRole === role.id
                         ? 'bg-white shadow-lg ' + role.color

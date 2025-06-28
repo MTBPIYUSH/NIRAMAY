@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { BarChart3, Users, AlertTriangle, CheckCircle, Clock, MapPin, Phone, Star, UserCheck } from 'lucide-react';
 import { mockComplaints, mockSubWorkers, mockAnalytics } from '../data/mockData';
+import { Profile } from '../lib/supabase';
+import { Complaint, SubWorker } from '../types';
 
 interface AdminDashboardProps {
-  user: any;
+  user: Profile;
   onLogout: () => void;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'complaints' | 'workers' | 'analytics'>('dashboard');
-  const [complaints, setComplaints] = useState(mockComplaints);
-  const [workers, setWorkers] = useState(mockSubWorkers);
+  const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+  const [workers, setWorkers] = useState<SubWorker[]>(mockSubWorkers);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -50,7 +52,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   };
 
   const pendingComplaints = complaints.filter(c => c.status === 'submitted');
-  const assignedComplaints = complaints.filter(c => c.status === 'assigned' || c.status === 'in-progress');
   const completedComplaints = complaints.filter(c => c.status === 'completed');
   const availableWorkers = workers.filter(w => w.status === 'available');
 
@@ -92,7 +93,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as 'dashboard' | 'complaints' | 'workers' | 'analytics')}
                 className={`flex items-center px-4 py-2 rounded-lg font-medium transition-all ${
                   activeTab === tab.id
                     ? 'bg-white text-blue-600 shadow-sm'

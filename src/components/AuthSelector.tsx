@@ -54,7 +54,7 @@ export const AuthSelector: React.FC<AuthSelectorProps> = ({ onRoleSelect }) => {
             return (
               <div
                 key={role.id}
-                onClick={() => onRoleSelect(role.id as any)}
+                onClick={() => onRoleSelect(role.id as 'citizen' | 'admin' | 'subworker')}
                 className="group cursor-pointer transform hover:scale-105 transition-all duration-300"
               >
                 <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-300 border border-gray-100">

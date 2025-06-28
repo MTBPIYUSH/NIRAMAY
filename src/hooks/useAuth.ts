@@ -29,6 +29,7 @@ export const useAuth = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state change:', event, session?.user?.id);
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -46,6 +47,7 @@ export const useAuth = () => {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -54,12 +56,61 @@ export const useAuth = () => {
 
       if (error) {
         console.error('Error fetching profile:', error);
+        
+        // If profile doesn't exist, try to create one
+        if (error.code === 'PGRST116') { // No rows returned
+          console.log('Profile not found, attempting to create one...');
+          await createProfileForUser(userId);
+          return;
+        }
+        
+        setProfile(null);
         return;
       }
 
+      console.log('Profile fetched:', data);
       setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
+      setProfile(null);
+    }
+  };
+
+  const createProfileForUser = async (userId: string) => {
+    try {
+      console.log('Creating profile for existing user:', userId);
+      
+      // Get user metadata from auth
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        console.error('Error getting user data:', userError);
+        return;
+      }
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: userId,
+            role: user.user_metadata?.role || 'citizen',
+            name: user.user_metadata?.name || 'User',
+            aadhar: user.user_metadata?.aadhar,
+            phone: user.user_metadata?.phone,
+            points: 0
+          }
+        ]);
+
+      if (profileError) {
+        console.error('Error creating profile for existing user:', profileError);
+        return;
+      }
+
+      console.log('Profile created for existing user');
+      // Fetch the profile again
+      await fetchProfile(userId);
+    } catch (error) {
+      console.error('Error in createProfileForUser:', error);
     }
   };
 
@@ -69,6 +120,9 @@ export const useAuth = () => {
     phone?: string;
   }) => {
     try {
+      console.log('Starting signup process...');
+      
+      // First, create the auth user
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -82,45 +136,50 @@ export const useAuth = () => {
         }
       });
 
-      if (error) throw error;
-
-      // Create profile after successful auth signup
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: data.user.id,
-              role: 'citizen',
-              name: userData.name,
-              aadhar: userData.aadhar,
-              phone: userData.phone,
-            }
-          ]);
-
-        if (profileError) {
-          console.error('Error creating profile:', profileError);
-          throw profileError;
-        }
+      if (error) {
+        console.error('Auth signup error:', error);
+        throw error;
       }
 
+      console.log('Auth signup successful:', data);
+
+      // Note: Profile creation will be handled by a database trigger
+      // or we can create it after email confirmation
+      // For now, we'll let the auth state change handle profile creation
+      
       return { data, error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Signup error:', error);
       return { data: null, error };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
+      console.log('Starting signin process...');
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Signin error:', error);
+        throw error;
+      }
+
+      console.log('Signin successful:', data);
+
+      // If signin is successful, fetch the profile
+      if (data.user) {
+        // Add a small delay to allow any triggers to complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await fetchProfile(data.user.id);
+      }
 
       return { data, error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Signin error:', error);
       return { data: null, error };
     }
   };
@@ -134,7 +193,7 @@ export const useAuth = () => {
       setProfile(null);
       
       return { error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
       return { error };
     }
   };

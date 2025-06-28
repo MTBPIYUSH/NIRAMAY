@@ -114,14 +114,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           }
 
           // Citizen sign up
+          console.log('Starting citizen signup...');
           const { data, error } = await signUp(formData.email, formData.password, {
             name: formData.name,
             aadhar: formData.aadhar,
             phone: formData.phone
           });
 
-          if (error) throw error;
+          if (error) {
+            console.error('Signup error:', error);
+            throw error;
+          }
 
+          console.log('Signup successful:', data);
           setMessage({
             type: 'success',
             text: 'Account created successfully! Please check your email to verify your account.'
@@ -129,18 +134,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         }
       } else {
         // Sign in
+        console.log('Starting signin...');
         const { data, error } = await signIn(formData.email, formData.password);
 
-        if (error) throw error;
-
-        if (data.user) {
-          onAuthSuccess();
+        if (error) {
+          console.error('Signin error:', error);
+          throw error;
         }
+
+        console.log('Signin successful:', data);
+
+        // Call onAuthSuccess after successful sign-in
+        onAuthSuccess();
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      console.error('Form submission error:', error);
       setMessage({
         type: 'error',
-        text: error.message || 'An error occurred. Please try again.'
+        text: error instanceof Error ? error.message : 'An error occurred. Please try again.'
       });
     } finally {
       setLoading(false);
@@ -251,7 +262,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     <button
                       key={role.id}
                       type="button"
-                      onClick={() => handleRoleChange(role.id as any)}
+                      onClick={() => handleRoleChange(role.id as 'citizen' | 'admin' | 'subworker')}
                       className={`p-3 rounded-xl border-2 transition-all ${
                         selectedRole === role.id
                           ? 'border-green-500 bg-green-50'

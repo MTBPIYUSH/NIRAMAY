@@ -14,6 +14,7 @@ export type Profile = {
   role: 'citizen' | 'admin' | 'subworker';
   aadhar?: string;
   name: string;
+  email?: string;
   phone?: string;
   ward?: string;
   city?: string;

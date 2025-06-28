@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { CheckCircle, Clock, MapPin, Camera, Star, TrendingUp } from 'lucide-react';
+import { CheckCircle, Clock, MapPin, Star, TrendingUp } from 'lucide-react';
 import { mockComplaints, mockSubWorkers } from '../data/mockData';
+import { Profile } from '../lib/supabase';
+import { Complaint, SubWorker } from '../types';
 
 interface SubWorkerDashboardProps {
-  user: any;
+  user: Profile;
   onLogout: () => void;
 }
 
 export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'completed'>('dashboard');
-  const [complaints, setComplaints] = useState(mockComplaints);
-  const [workers, setWorkers] = useState(mockSubWorkers);
+  const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+  const [workers, setWorkers] = useState<SubWorker[]>(mockSubWorkers);
 
   const currentWorker = workers.find(w => w.id === user.id) || mockSubWorkers[0];
   const assignedTasks = complaints.filter(c => c.assignedTo === user.id && c.status !== 'completed');
@@ -97,7 +99,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as 'dashboard' | 'tasks' | 'completed')}
                 className={`flex items-center px-4 py-2 rounded-lg font-medium transition-all ${
                   activeTab === tab.id
                     ? 'bg-white text-orange-600 shadow-sm'

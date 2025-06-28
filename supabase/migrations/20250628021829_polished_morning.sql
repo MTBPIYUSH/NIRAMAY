@@ -18,6 +18,9 @@
     - Enable RLS on `profiles` table
     - Add policies for users to read/update their own data
     - Add policy for admins to read all profiles
+
+  3. Triggers
+    - Auto-create profile when user signs up
 */
 
 CREATE TABLE IF NOT EXISTS profiles (
@@ -96,3 +99,25 @@ CREATE TRIGGER profiles_updated_at
   BEFORE UPDATE ON profiles
   FOR EACH ROW
   EXECUTE FUNCTION handle_updated_at();
+
+-- Function to create profile automatically when user signs up
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, role, name, aadhar, phone, points)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'role', 'citizen'),
+    COALESCE(NEW.raw_user_meta_data->>'name', 'User'),
+    NEW.raw_user_meta_data->>'aadhar',
+    NEW.raw_user_meta_data->>'phone',
+    0
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger to create profile when user signs up
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();

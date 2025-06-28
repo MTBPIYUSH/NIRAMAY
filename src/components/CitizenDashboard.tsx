@@ -12,21 +12,17 @@ import {
   User,
   ChevronDown,
   Trophy,
-  Gift,
-  ArrowRight,
-  Star,
   Calendar,
   Target,
-  Zap,
-  Users,
-  Medal
+  Zap
 } from 'lucide-react';
 import { CameraCapture } from './CameraCapture';
 import { mockComplaints, mockEcoProducts } from '../data/mockData';
-import { Complaint, EcoProduct } from '../types';
+import { Profile } from '../lib/supabase';
+import { Complaint } from '../types';
 
 interface CitizenDashboardProps {
-  user: any;
+  user: Profile;
   onLogout: () => void;
 }
 
@@ -36,10 +32,10 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   const [showCamera, setShowCamera] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
-  const [newComplaint, setNewComplaint] = useState({
+  const [newComplaint, setNewComplaint] = useState<Partial<Complaint>>({
     title: '',
     description: '',
-    priority: 'medium' as const,
+    priority: 'medium',
     imageUrl: ''
   });
 
@@ -76,7 +72,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   };
 
   const handleImageCapture = (imageDataUrl: string) => {
-    setNewComplaint(prev => ({ ...prev, imageUrl: imageDataUrl }));
+    setNewComplaint((prev: Partial<Complaint>) => ({ ...prev, imageUrl: imageDataUrl }));
   };
 
   const handleSubmitComplaint = () => {
@@ -89,21 +85,21 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       id: Date.now().toString(),
       userId: user.id,
       userName: user.name,
-      title: newComplaint.title,
-      description: newComplaint.description,
-      imageUrl: newComplaint.imageUrl,
+      title: newComplaint.title || '',
+      description: newComplaint.description || '',
+      imageUrl: newComplaint.imageUrl || '',
       location: {
         lat: 28.4595 + Math.random() * 0.01,
         lng: 77.0266 + Math.random() * 0.01,
         address: 'Auto-detected location, Gurgaon'
       },
       status: 'submitted',
-      priority: newComplaint.priority,
+      priority: (newComplaint.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
       submittedAt: new Date()
     };
 
-    setComplaints(prev => [newComplaintData, ...prev]);
-    setNewComplaint({ title: '', description: '', priority: 'medium', imageUrl: '' });
+    setComplaints((prev: Complaint[]) => [newComplaintData, ...prev]);
+    setNewComplaint(() => ({ title: '', description: '', priority: 'medium', imageUrl: '' }));
     setActiveTab('complaints');
     alert('Report submitted successfully! Our team will review it shortly.');
   };
@@ -160,7 +156,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50">
                     <div className="p-3 border-b border-gray-100">
                       <p className="font-semibold text-gray-800">{user.name}</p>
-                      <p className="text-sm text-gray-500">{user.email}</p>
+                      <p className="text-sm text-gray-500">{user.email || 'No email'}</p>
                     </div>
                     <div className="p-2">
                       <button className="w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
@@ -194,7 +190,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as 'dashboard' | 'report' | 'complaints' | 'store')}
                 className={`flex items-center px-4 py-3 rounded-xl font-semibold transition-all ${
                   activeTab === tab.id
                     ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg transform scale-105'
@@ -247,7 +243,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   <label className="block text-sm font-semibold text-gray-700 mb-3">Priority Level</label>
                   <select
                     value={newComplaint.priority}
-                    onChange={(e) => setNewComplaint(prev => ({ ...prev, priority: e.target.value as any }))}
+                    onChange={(e) => setNewComplaint(prev => ({ ...prev, priority: e.target.value as 'low' | 'medium' | 'high' | 'critical' }))}
                     className="w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-100 focus:border-green-500 transition-all text-lg"
                   >
                     <option value="low">Low Priority</option>

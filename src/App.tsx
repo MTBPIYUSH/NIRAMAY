@@ -11,23 +11,33 @@ function App() {
   const { user, profile, loading, signOut } = useAuth();
 
   useEffect(() => {
+    console.log('App useEffect - user:', user?.id, 'profile:', profile?.id, 'loading:', loading);
+    
     if (user && profile) {
+      console.log('User and profile found, setting dashboard view');
       setCurrentView('dashboard');
     } else if (user && !profile) {
+      console.log('User found but no profile, staying on auth view');
       // User exists but no profile - might be pending verification
       setCurrentView('auth');
+    } else if (!user && !loading) {
+      console.log('No user and not loading, setting landing view');
+      setCurrentView('landing');
     }
-  }, [user, profile]);
+  }, [user, profile, loading]);
 
   const handleGetStarted = () => {
+    console.log('Get started clicked, setting auth view');
     setCurrentView('auth');
   };
 
   const handleAuthSuccess = () => {
+    console.log('Auth success, setting dashboard view');
     setCurrentView('dashboard');
   };
 
   const handleLogout = async () => {
+    console.log('Logout clicked');
     await signOut();
     setCurrentView('landing');
   };
