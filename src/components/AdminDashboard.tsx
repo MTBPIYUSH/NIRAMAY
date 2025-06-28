@@ -18,7 +18,7 @@ import {
   Eye,
   UserCheck,
   Navigation,
-  Map
+  Map as MapIcon
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
@@ -81,7 +81,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [reports, setReports] = useState<Complaint[]>([]);
   const [subWorkers, setSubWorkers] = useState<SubWorkerProfile[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [reporterProfiles, setReporterProfiles] = useState<Map<string, ReporterProfile>>(new Map());
+  const [reporterProfiles, setReporterProfiles] = useState<globalThis.Map<string, ReporterProfile>>(new globalThis.Map());
   const [loadingReports, setLoadingReports] = useState(false);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -154,7 +154,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         }
       }
 
-      const profileMap = new Map(profilesData.map(profile => [profile.id, profile]));
+      const profileMap = new globalThis.Map(profilesData.map(profile => [profile.id, profile]));
       setReporterProfiles(profileMap);
 
       // Convert to complaint format
@@ -1055,7 +1055,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                     ) : (
                       <div className="w-full h-64 bg-gray-100 rounded-xl flex items-center justify-center">
                         <div className="text-center">
-                          <Map size={48} className="text-gray-400 mx-auto mb-2" />
+                          <MapIcon size={48} className="text-gray-400 mx-auto mb-2" />
                           <p className="text-gray-500">Loading map...</p>
                         </div>
                       </div>

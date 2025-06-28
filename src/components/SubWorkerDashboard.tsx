@@ -51,7 +51,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [submittingProof, setSubmittingProof] = useState(false);
-  const [reporterProfiles, setReporterProfiles] = useState<Map<string, ReporterProfile>>(new Map());
+  const [reporterProfiles, setReporterProfiles] = useState<globalThis.Map<string, ReporterProfile>>(new globalThis.Map());
   const [proofModal, setProofModal] = useState<ProofSubmissionModal>({
     isOpen: false,
     report: null
@@ -64,6 +64,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   const [rejectionBanner, setRejectionBanner] = useState<string>('');
   const [mapsLoaded, setMapsLoaded] = useState(false);
+  const [locationError, setLocationError] = useState<string>('');
   const mapRef = useRef<HTMLDivElement>(null);
   const taskMapRef = useRef<HTMLDivElement>(null);
   const [currentMap, setCurrentMap] = useState<google.maps.Map | null>(null);
@@ -107,10 +108,12 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
 
   const getCurrentLocationData = async () => {
     try {
+      setLocationError('');
       const location = await getCurrentLocation();
       setCurrentLocation(location);
     } catch (error) {
       console.error('Error getting location:', error);
+      setLocationError('Location unavailable. Please check your browser permissions and try again.');
       // Use mock location for demo
       setCurrentLocation({
         lat: 28.4595 + Math.random() * 0.01,
@@ -151,7 +154,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
         }
       }
 
-      const profileMap = new Map(profilesData.map(profile => [profile.id, profile]));
+      const profileMap = new globalThis.Map(profilesData.map(profile => [profile.id, profile]));
       setReporterProfiles(profileMap);
 
       // Convert to complaint format
@@ -413,6 +416,34 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
           </div>
         </div>
       </div>
+
+      {/* Location Error Banner */}
+      {locationError && (
+        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mx-4 mt-4 rounded-r-lg">
+          <div className="flex items-center">
+            <AlertTriangle className="text-yellow-400 mr-3" size={20} />
+            <div className="flex-1">
+              <p className="text-yellow-800 font-medium">Location Access Issue</p>
+              <p className="text-yellow-700 text-sm">{locationError}</p>
+            </div>
+            <button
+              onClick={() => {
+                setLocationError('');
+                getCurrentLocationData();
+              }}
+              className="ml-4 px-3 py-1 bg-yellow-200 text-yellow-800 rounded-lg text-sm hover:bg-yellow-300 transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setLocationError('')}
+              className="ml-2 text-yellow-400 hover:text-yellow-600"
+            >
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Rejection Banner */}
       {rejectionBanner && (

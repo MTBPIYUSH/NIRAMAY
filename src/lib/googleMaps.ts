@@ -53,7 +53,7 @@ export const initializeGoogleMaps = (apiKey: string): Promise<void> => {
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry,directions&callback=__initGoogleMaps`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=__initGoogleMaps`;
     script.async = true;
     script.defer = true;
 
@@ -284,7 +284,7 @@ export const getCurrentLocation = (): Promise<MapLocation> => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
+        timeout: 15000, // Increased timeout to 15 seconds
         maximumAge: 300000 // 5 minutes
       }
     );
