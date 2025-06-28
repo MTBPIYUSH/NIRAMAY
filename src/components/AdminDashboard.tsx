@@ -19,9 +19,6 @@ interface DatabaseReport {
   status: string;
   created_at: string;
   updated_at: string;
-  profiles?: {
-    name: string;
-  };
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
@@ -38,28 +35,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const fetchRegionalReports = async () => {
     setLoadingReports(true);
     try {
-      // Fetch reports from the admin's region (ward/city)
-      // For now, we'll fetch all reports and filter by address containing the ward/city
-      const { data, error } = await supabase
+      // First fetch reports
+      const { data: reportsData, error: reportsError } = await supabase
         .from('reports')
-        .select(`
-          *,
-          profiles!reports_user_id_fkey (
-            name
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching reports:', error);
+      if (reportsError) {
+        console.error('Error fetching reports:', reportsError);
         return;
       }
 
+      // Then fetch user profiles for the reports
+      const userIds = reportsData?.map(report => report.user_id).filter(Boolean) || [];
+      
+      let profilesData: any[] = [];
+      if (userIds.length > 0) {
+        const { data: profiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, name')
+          .in('id', userIds);
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+        } else {
+          profilesData = profiles || [];
+        }
+      }
+
+      // Create a map of user_id to profile for quick lookup
+      const profileMap = new Map(profilesData.map(profile => [profile.id, profile]));
+
       // Convert database reports to complaint format
-      const convertedComplaints: Complaint[] = (data || []).map((report: DatabaseReport) => ({
+      const convertedComplaints: Complaint[] = (reportsData || []).map((report: DatabaseReport) => ({
         id: report.id,
         userId: report.user_id,
-        userName: report.profiles?.name || 'Unknown User',
+        userName: profileMap.get(report.user_id)?.name || 'Unknown User',
         title: 'Waste Report', // Default title since we don't store it in DB yet
         description: 'Reported waste issue', // Default description
         imageUrl: report.images[0] || '',
@@ -77,7 +88,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       let filteredComplaints = convertedComplaints;
       if (user.ward || user.city) {
         filteredComplaints = convertedComplaints.filter(complaint => {
-          const address = complaint.location.address.toLowerCase();
+          const address = complaint.location.address?.toLowerCase() || '';
           const ward = user.ward?.toLowerCase() || '';
           const city = user.city?.toLowerCase() || '';
           
