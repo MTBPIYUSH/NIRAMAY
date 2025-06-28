@@ -18,12 +18,14 @@ import {
   Upload,
   Bell,
   X,
-  Sparkles
+  Sparkles,
+  Settings
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
 import { analyzeWasteReport, validateImageForAnalysis } from '../lib/gemini';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, Notification } from '../lib/notifications';
+import { CitizenProfile } from './CitizenProfile';
 
 interface CitizenDashboardProps {
   user: Profile;
@@ -57,7 +59,7 @@ interface DatabaseReport {
 
 export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogout }) => {
   // Default to 'report' tab for citizens as per requirements
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'report' | 'complaints' | 'store'>('report');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'report' | 'complaints' | 'store' | 'profile'>('report');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -73,6 +75,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   });
   const [images, setImages] = useState<string[]>([]);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<Profile>(user);
 
   const userComplaints = complaints.filter(c => c.userId === user.id);
   const unreadNotifications = notifications.filter(n => !n.is_read);
@@ -176,6 +179,10 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   const handleMarkAllAsRead = async () => {
     await markAllNotificationsAsRead(user.id);
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  };
+
+  const handleProfileUpdate = (updatedProfile: Profile) => {
+    setCurrentUser(updatedProfile);
   };
 
   const getStatusColor = (status: string) => {
@@ -372,6 +379,17 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     }
   };
 
+  // Show profile page if selected
+  if (activeTab === 'profile') {
+    return (
+      <CitizenProfile
+        user={currentUser}
+        onBack={() => setActiveTab('dashboard')}
+        onProfileUpdate={handleProfileUpdate}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-orange-50 to-blue-50">
       {/* Enhanced Header */}
@@ -394,7 +412,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               {/* Eco Points Display */}
               <div className="hidden sm:flex items-center bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-full shadow-lg">
                 <Award size={18} className="mr-2" />
-                <span className="font-bold">{user.eco_points || 0}</span>
+                <span className="font-bold">{currentUser.eco_points || 0}</span>
                 <span className="text-xs ml-1 opacity-90">points</span>
               </div>
 
@@ -472,18 +490,25 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center">
                     <User size={16} className="text-white" />
                   </div>
-                  <span className="hidden sm:block font-medium text-gray-700">{user.name?.split(' ')[0] || 'User'}</span>
+                  <span className="hidden sm:block font-medium text-gray-700">{currentUser.name?.split(' ')[0] || 'User'}</span>
                   <ChevronDown size={16} className="text-gray-500" />
                 </button>
 
                 {showUserDropdown && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50">
                     <div className="p-3 border-b border-gray-100">
-                      <p className="font-semibold text-gray-800">{user.name}</p>
-                      <p className="text-sm text-gray-500">{user.email || 'No email'}</p>
+                      <p className="font-semibold text-gray-800">{currentUser.name}</p>
+                      <p className="text-sm text-gray-500">{currentUser.email || 'No email'}</p>
                     </div>
                     <div className="p-2">
-                      <button className="w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+                      <button 
+                        onClick={() => {
+                          setActiveTab('profile');
+                          setShowUserDropdown(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center"
+                      >
+                        <Settings size={16} className="mr-2" />
                         Profile Settings
                       </button>
                       <button
@@ -690,7 +715,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               <div className="flex flex-col md:flex-row items-center justify-between">
                 <div className="mb-6 md:mb-0">
                   <h2 className="text-3xl font-bold mb-2">
-                    Hello, {user.name?.split(' ')[0] || 'User'}!
+                    Hello, {currentUser.name?.split(' ')[0] || 'User'}!
                   </h2>
                   <p className="text-green-100 text-lg">
                     Let's clean our streets together and make India beautiful!
@@ -750,7 +775,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Eco Points</p>
-                    <p className="text-3xl font-bold text-gray-900">{user.eco_points || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{currentUser.eco_points || 0}</p>
                   </div>
                   <div className="w-14 h-14 bg-yellow-100 rounded-2xl flex items-center justify-center">
                     <Award className="text-yellow-600" size={28} />
@@ -968,7 +993,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               <div className="flex items-center bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-2xl shadow-lg">
                 <Award size={24} className="mr-3" />
                 <div>
-                  <span className="font-bold text-lg">{user.eco_points || 0}</span>
+                  <span className="font-bold text-lg">{currentUser.eco_points || 0}</span>
                   <span className="text-green-100 ml-2">Points Available</span>
                 </div>
               </div>
@@ -1003,10 +1028,10 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                     </div>
                     
                     <button
-                      disabled={(user.eco_points || 0) < product.point_cost || product.quantity === 0}
+                      disabled={(currentUser.eco_points || 0) < product.point_cost || product.quantity === 0}
                       className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transform hover:scale-105 shadow-lg hover:shadow-xl"
                     >
-                      {(user.eco_points || 0) < product.point_cost ? 'Insufficient Points' : 
+                      {(currentUser.eco_points || 0) < product.point_cost ? 'Insufficient Points' : 
                       product.quantity === 0 ? 'Out of Stock' : 'Redeem Now'}
                     </button>
                   </div>
