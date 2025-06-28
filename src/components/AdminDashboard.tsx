@@ -18,7 +18,14 @@ import {
   Eye,
   UserCheck,
   Navigation,
-  Map as MapIcon
+  Map as MapIcon,
+  Phone,
+  Mail,
+  Shield,
+  Activity,
+  Star,
+  Briefcase,
+  UserPlus
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
@@ -67,11 +74,20 @@ interface SubWorkerProfile {
   status: string;
   ward?: string;
   assigned_ward?: string;
+  task_completion_count?: number;
+  eco_points?: number;
+  created_at: string;
+  current_task_id?: string;
 }
 
 interface ReportDetailModal {
   isOpen: boolean;
   report: Complaint | null;
+}
+
+interface WorkerDetailModal {
+  isOpen: boolean;
+  worker: SubWorkerProfile | null;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
@@ -86,10 +102,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [workerFilterStatus, setWorkerFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [workerSearchTerm, setWorkerSearchTerm] = useState('');
   const [reportDetailModal, setReportDetailModal] = useState<ReportDetailModal>({
     isOpen: false,
     report: null
+  });
+  const [workerDetailModal, setWorkerDetailModal] = useState<WorkerDetailModal>({
+    isOpen: false,
+    worker: null
   });
   const [mapsLoaded, setMapsLoaded] = useState(false);
   const mapRef = useRef<HTMLDivElement>(null);
@@ -204,8 +226,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, name, phone, status, ward, assigned_ward')
+        .select('id, name, phone, status, ward, assigned_ward, task_completion_count, eco_points, created_at, current_task_id')
         .eq('role', 'subworker')
+        .order('status', { ascending: true }) // Available first
         .order('name', { ascending: true });
 
       if (error) {
@@ -267,6 +290,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
+  const openWorkerDetail = (worker: SubWorkerProfile) => {
+    setWorkerDetailModal({ isOpen: true, worker });
+  };
+
   const assignTaskToWorker = async (reportId: string, workerId: string) => {
     try {
       const { error } = await supabase
@@ -283,11 +310,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         return;
       }
 
+      // Update worker status to busy
+      await supabase
+        .from('profiles')
+        .update({
+          status: 'busy',
+          current_task_id: reportId
+        })
+        .eq('id', workerId);
+
       // Update local state
       setReports(prev => prev.map(report =>
         report.id === reportId
           ? { ...report, status: 'assigned', assignedTo: workerId }
           : report
+      ));
+
+      setSubWorkers(prev => prev.map(worker =>
+        worker.id === workerId
+          ? { ...worker, status: 'busy', current_task_id: reportId }
+          : worker
       ));
 
       alert('Task assigned successfully!');
@@ -389,6 +431,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       case 'in-progress': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'completed': return 'bg-green-100 text-green-800 border-green-200';
       case 'submitted_for_approval': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'available': return 'bg-green-100 text-green-800 border-green-200';
+      case 'busy': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'offline': return 'bg-gray-100 text-gray-800 border-gray-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -403,6 +448,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
+  const getWorkerEfficiencyRating = (worker: SubWorkerProfile) => {
+    const tasksCompleted = worker.task_completion_count || 0;
+    const daysSinceJoined = Math.max(1, Math.floor((Date.now() - new Date(worker.created_at).getTime()) / (1000 * 60 * 60 * 24)));
+    const tasksPerDay = tasksCompleted / daysSinceJoined;
+    
+    if (tasksPerDay >= 2) return { rating: 5, label: 'Excellent' };
+    if (tasksPerDay >= 1.5) return { rating: 4, label: 'Very Good' };
+    if (tasksPerDay >= 1) return { rating: 3, label: 'Good' };
+    if (tasksPerDay >= 0.5) return { rating: 2, label: 'Fair' };
+    return { rating: 1, label: 'Needs Improvement' };
+  };
+
   // Filter reports
   const filteredReports = reports.filter(report => {
     const matchesStatus = filterStatus === 'all' || report.status === filterStatus;
@@ -414,6 +471,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     return matchesStatus && matchesPriority && matchesSearch;
   });
 
+  // Filter workers - show workers in the same ward as admin or all if admin has no specific ward
+  const filteredWorkers = subWorkers.filter(worker => {
+    const matchesStatus = workerFilterStatus === 'all' || worker.status === workerFilterStatus;
+    const matchesSearch = workerSearchTerm === '' || 
+      worker.name.toLowerCase().includes(workerSearchTerm.toLowerCase()) ||
+      (worker.ward && worker.ward.toLowerCase().includes(workerSearchTerm.toLowerCase())) ||
+      (worker.assigned_ward && worker.assigned_ward.toLowerCase().includes(workerSearchTerm.toLowerCase()));
+    
+    // Show workers in the same ward as admin, or all workers if admin has no specific ward
+    const matchesWard = !user.ward || 
+      worker.ward === user.ward || 
+      worker.assigned_ward === user.ward;
+    
+    return matchesStatus && matchesSearch && matchesWard;
+  });
+
+  // Sort workers: available first, then by name
+  const sortedWorkers = [...filteredWorkers].sort((a, b) => {
+    if (a.status === 'available' && b.status !== 'available') return -1;
+    if (a.status !== 'available' && b.status === 'available') return 1;
+    return a.name.localeCompare(b.name);
+  });
+
   // Statistics
   const stats = {
     totalReports: reports.length,
@@ -421,7 +501,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     assignedReports: reports.filter(r => r.status === 'assigned').length,
     completedReports: reports.filter(r => r.status === 'completed').length,
     availableWorkers: subWorkers.filter(w => w.status === 'available').length,
-    busyWorkers: subWorkers.filter(w => w.status === 'busy').length
+    busyWorkers: subWorkers.filter(w => w.status === 'busy').length,
+    totalWorkers: subWorkers.length
   };
 
   return (
@@ -524,6 +605,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                     <div className="p-3 border-b border-gray-100">
                       <p className="font-semibold text-gray-800">{user.name}</p>
                       <p className="text-sm text-gray-500">Municipal Admin</p>
+                      {user.ward && (
+                        <p className="text-xs text-blue-600 mt-1">{user.ward}</p>
+                      )}
                     </div>
                     <div className="p-2">
                       <button
@@ -817,40 +901,226 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {/* Workers Tab */}
         {activeTab === 'workers' && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Sub-Workers Management</h2>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">Sub-Workers Management</h2>
+                <p className="text-gray-600 mt-1">
+                  {user.ward ? `Showing workers in ${user.ward}` : 'Showing all workers'}
+                  {' '}• {stats.availableWorkers} available, {stats.busyWorkers} busy
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <div className="flex items-center bg-green-50 px-4 py-2 rounded-xl border border-green-200">
+                  <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                  <span className="text-green-800 font-medium text-sm">Available: {stats.availableWorkers}</span>
+                </div>
+                <div className="flex items-center bg-orange-50 px-4 py-2 rounded-xl border border-orange-200">
+                  <div className="w-3 h-3 bg-orange-500 rounded-full mr-2"></div>
+                  <span className="text-orange-800 font-medium text-sm">Busy: {stats.busyWorkers}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Worker Filters */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex flex-col lg:flex-row gap-4">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by worker name or ward..."
+                      value={workerSearchTerm}
+                      onChange={(e) => setWorkerSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex gap-4">
+                  <select
+                    value={workerFilterStatus}
+                    onChange={(e) => setWorkerFilterStatus(e.target.value)}
+                    className="px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="available">Available</option>
+                    <option value="busy">Busy</option>
+                    <option value="offline">Offline</option>
+                  </select>
+                </div>
+              </div>
+            </div>
             
             {loadingWorkers ? (
               <div className="flex justify-center items-center py-12">
                 <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <span className="ml-3 text-gray-600">Loading workers...</span>
               </div>
+            ) : sortedWorkers.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
+                <Users size={64} className="text-gray-400 mx-auto mb-6" />
+                <h3 className="text-2xl font-bold text-gray-600 mb-4">No Workers Found</h3>
+                <p className="text-gray-500 mb-8">
+                  {workerFilterStatus !== 'all' || workerSearchTerm 
+                    ? 'No workers match your current filters.' 
+                    : 'No sub-workers are assigned to your ward yet.'
+                  }
+                </p>
+                {(workerFilterStatus !== 'all' || workerSearchTerm) && (
+                  <button
+                    onClick={() => {
+                      setWorkerFilterStatus('all');
+                      setWorkerSearchTerm('');
+                    }}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+              </div>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {subWorkers.map(worker => (
-                  <div key={worker.id} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-600 rounded-xl flex items-center justify-center">
-                        <User size={24} className="text-white" />
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        worker.status === 'available' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {worker.status}
-                      </span>
+              <>
+                {/* Workers Table */}
+                <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Worker Details
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Status & Availability
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Performance
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Ward Assignment
+                          </th>
+                          <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {sortedWorkers.map(worker => {
+                          const efficiency = getWorkerEfficiencyRating(worker);
+                          return (
+                            <tr key={worker.id} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-red-600 rounded-xl flex items-center justify-center mr-4">
+                                    <User size={20} className="text-white" />
+                                  </div>
+                                  <div>
+                                    <div className="text-sm font-bold text-gray-900">{worker.name}</div>
+                                    <div className="text-sm text-gray-500 flex items-center">
+                                      <Phone size={12} className="mr-1" />
+                                      {worker.phone || 'No phone'}
+                                    </div>
+                                    <div className="text-xs text-gray-400">
+                                      ID: {worker.id.slice(0, 8)}...
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="space-y-2">
+                                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(worker.status)}`}>
+                                    <Activity size={12} className="mr-1" />
+                                    {worker.status}
+                                  </span>
+                                  {worker.current_task_id && (
+                                    <div className="text-xs text-blue-600 flex items-center">
+                                      <Briefcase size={12} className="mr-1" />
+                                      Active Task
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-gray-500">
+                                    Joined: {new Date(worker.created_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="space-y-2">
+                                  <div className="flex items-center">
+                                    <div className="flex items-center mr-2">
+                                      {[...Array(5)].map((_, i) => (
+                                        <Star
+                                          key={i}
+                                          size={12}
+                                          className={`${
+                                            i < efficiency.rating
+                                              ? 'text-yellow-400 fill-current'
+                                              : 'text-gray-300'
+                                          }`}
+                                        />
+                                      ))}
+                                    </div>
+                                    <span className="text-xs text-gray-600">{efficiency.label}</span>
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    <div>Tasks: {worker.task_completion_count || 0}</div>
+                                    <div>Points: {worker.eco_points || 0}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {worker.ward || worker.assigned_ward || 'Unassigned'}
+                                </div>
+                                {worker.ward && worker.assigned_ward && worker.ward !== worker.assigned_ward && (
+                                  <div className="text-xs text-orange-600">
+                                    Assigned: {worker.assigned_ward}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button
+                                  onClick={() => openWorkerDetail(worker)}
+                                  className="text-blue-600 hover:text-blue-900 font-medium"
+                                >
+                                  View Details
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Workers Summary */}
+                <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-4">Workers Summary</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">{stats.availableWorkers}</div>
+                      <div className="text-sm text-gray-600">Available for Assignment</div>
                     </div>
-                    
-                    <h3 className="text-lg font-bold text-gray-800 mb-2">{worker.name}</h3>
-                    <p className="text-gray-600 text-sm mb-1">📞 {worker.phone}</p>
-                    <p className="text-gray-600 text-sm mb-4">🏛️ {worker.ward || worker.assigned_ward || 'No ward assigned'}</p>
-                    
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">ID: {worker.id.slice(0, 8)}...</span>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-orange-600">{stats.busyWorkers}</div>
+                      <div className="text-sm text-gray-600">Currently Working</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">
+                        {stats.totalWorkers > 0 ? Math.round((stats.availableWorkers / stats.totalWorkers) * 100) : 0}%
+                      </div>
+                      <div className="text-sm text-gray-600">Availability Rate</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {subWorkers.reduce((sum, w) => sum + (w.task_completion_count || 0), 0)}
+                      </div>
+                      <div className="text-sm text-gray-600">Total Tasks Completed</div>
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -904,6 +1174,123 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </div>
         )}
       </div>
+
+      {/* Worker Detail Modal */}
+      {workerDetailModal.isOpen && workerDetailModal.worker && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">Worker Details</h3>
+                <button
+                  onClick={() => setWorkerDetailModal({ isOpen: false, worker: null })}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                {/* Worker Info */}
+                <div className="flex items-center space-x-4">
+                  <div className="w-20 h-20 bg-gradient-to-br from-orange-400 to-red-600 rounded-2xl flex items-center justify-center">
+                    <User size={32} className="text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="text-xl font-bold text-gray-800">{workerDetailModal.worker.name}</h4>
+                    <div className="flex items-center space-x-4 mt-2">
+                      <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(workerDetailModal.worker.status)}`}>
+                        {workerDetailModal.worker.status}
+                      </span>
+                      <div className="flex items-center text-gray-600">
+                        <Phone size={14} className="mr-1" />
+                        <span className="text-sm">{workerDetailModal.worker.phone || 'No phone'}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performance Metrics */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 rounded-xl p-4 border border-blue-200">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600 mb-1">
+                        {workerDetailModal.worker.task_completion_count || 0}
+                      </div>
+                      <div className="text-sm text-blue-700">Tasks Completed</div>
+                    </div>
+                  </div>
+                  <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600 mb-1">
+                        {workerDetailModal.worker.eco_points || 0}
+                      </div>
+                      <div className="text-sm text-green-700">Eco Points Earned</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Efficiency Rating */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-800 mb-3">Performance Rating</h5>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          size={20}
+                          className={`${
+                            i < getWorkerEfficiencyRating(workerDetailModal.worker!).rating
+                              ? 'text-yellow-400 fill-current'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="font-medium text-gray-700">
+                      {getWorkerEfficiencyRating(workerDetailModal.worker).label}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Assignment Info */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h5 className="font-semibold text-gray-800 mb-3">Assignment Details</h5>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Ward:</span>
+                      <span className="font-medium">{workerDetailModal.worker.ward || workerDetailModal.worker.assigned_ward || 'Unassigned'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Joined:</span>
+                      <span className="font-medium">{new Date(workerDetailModal.worker.created_at).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Current Task:</span>
+                      <span className="font-medium">
+                        {workerDetailModal.worker.current_task_id ? 'Active' : 'None'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Available for Assignment */}
+                {workerDetailModal.worker.status === 'available' && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <div className="flex items-center text-green-700">
+                      <CheckCircle size={20} className="mr-2" />
+                      <span className="font-semibold">Available for Task Assignment</span>
+                    </div>
+                    <p className="text-green-600 text-sm mt-1">
+                      This worker is ready to receive new cleanup assignments.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Report Detail Modal */}
       {reportDetailModal.isOpen && reportDetailModal.report && (
@@ -983,7 +1370,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                           <div key={worker.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                             <div>
                               <p className="font-medium">{worker.name}</p>
-                              <p className="text-sm text-gray-600">{worker.ward}</p>
+                              <p className="text-sm text-gray-600">{worker.ward || worker.assigned_ward}</p>
                             </div>
                             <button
                               onClick={() => assignTaskToWorker(reportDetailModal.report!.id, worker.id)}
