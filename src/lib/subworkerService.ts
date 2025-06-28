@@ -279,14 +279,14 @@ export const updateSubWorkerStatus = async (
       .eq('id', workerId);
 
     if (error) {
-      console.error('❌ Error updating worker status:', error);
+      console.error('Error updating worker status:', error);
       throw error;
     }
 
-    console.log('✅ Worker status updated:', workerId, status);
+    console.log('Worker status updated:', workerId, status);
 
   } catch (error) {
-    console.error('❌ Error in updateSubWorkerStatus:', error);
+    console.error('Error in updateSubWorkerStatus:', error);
     throw error;
   }
 };
@@ -309,7 +309,7 @@ export const getAvailableWorkersForWard = async (ward?: string): Promise<SubWork
     const { data, error } = await query.order('task_completion_count', { ascending: true });
 
     if (error) {
-      console.error('❌ Error fetching available workers:', error);
+      console.error('Error fetching available workers:', error);
       throw error;
     }
 
@@ -330,7 +330,7 @@ export const getAvailableWorkersForWard = async (ward?: string): Promise<SubWork
     }));
 
   } catch (error) {
-    console.error('❌ Error in getAvailableWorkersForWard:', error);
+    console.error('Error in getAvailableWorkersForWard:', error);
     throw error;
   }
 };
@@ -409,10 +409,10 @@ export const createSampleSubWorkers = async (): Promise<void> => {
     // Note: This would require actual auth user IDs
     // In a real implementation, you'd need to create auth users first
     console.log('Sample workers data prepared:', sampleWorkers);
-    console.log('⚠️ Note: Actual implementation requires creating auth users first');
+    console.log('Note: Actual implementation requires creating auth users first');
 
   } catch (error) {
-    console.error('❌ Error creating sample subworkers:', error);
+    console.error('Error creating sample subworkers:', error);
     throw error;
   }
 };
