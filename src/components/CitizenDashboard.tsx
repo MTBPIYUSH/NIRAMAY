@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
-import { analyzeWasteReport, validateImageForAnalysis } from '../lib/gemini';
+import { analyzeWasteReport, validateImageForAnalysis, validateAndFixEcoPoints } from '../lib/gemini';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, Notification } from '../lib/notifications';
 import { CitizenProfile } from './CitizenProfile';
 
@@ -102,25 +102,32 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       }
 
       // Convert database reports to complaint format
-      const convertedComplaints: Complaint[] = (data || []).map((report: DatabaseReport) => ({
-        id: report.id,
-        userId: report.user_id,
-        userName: user.name,
-        title: 'Waste Report',
-        description: 'Reported waste issue',
-        imageUrl: report.images[0] || '',
-        images: report.images || [],
-        location: {
-          lat: report.lat,
-          lng: report.lng,
-          address: report.address
-        },
-        status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
-        priority: (report.priority_level as 'low' | 'medium' | 'high' | 'critical') || 'medium',
-        submittedAt: new Date(report.created_at),
-        ecoPoints: report.eco_points,
-        aiAnalysis: report.ai_analysis
-      }));
+      const convertedComplaints: Complaint[] = (data || []).map((report: DatabaseReport) => {
+        // Validate and fix eco points if needed
+        const validatedPoints = report.eco_points && report.priority_level 
+          ? validateAndFixEcoPoints(report.priority_level, report.eco_points)
+          : report.eco_points;
+
+        return {
+          id: report.id,
+          userId: report.user_id,
+          userName: user.name,
+          title: 'Waste Report',
+          description: 'Reported waste issue',
+          imageUrl: report.images[0] || '',
+          images: report.images || [],
+          location: {
+            lat: report.lat,
+            lng: report.lng,
+            address: report.address
+          },
+          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
+          priority: (report.priority_level as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
+          submittedAt: new Date(report.created_at),
+          ecoPoints: validatedPoints,
+          aiAnalysis: report.ai_analysis
+        };
+      });
 
       setComplaints(convertedComplaints);
     } catch (error) {
@@ -308,17 +315,20 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
           // Use default values if AI fails
           finalAnalysis = {
             priority_level: 'medium',
-            eco_points: 75,
+            eco_points: 20, // Fixed: medium priority = 20 points
             analysis: {
               waste_type: 'General waste',
               severity: 'Moderate',
               environmental_impact: 'Standard cleanup required',
               cleanup_difficulty: 'Medium effort',
-              reasoning: 'AI analysis unavailable, using default assessment'
+              reasoning: 'AI analysis unavailable, using default medium priority assessment (20 points)'
             }
           };
         }
       }
+
+      // Validate eco points before submission
+      const validatedPoints = validateAndFixEcoPoints(finalAnalysis?.priority_level || 'medium', finalAnalysis?.eco_points || 20);
 
       // Insert report into database with AI analysis
       const { data, error } = await supabase
@@ -332,7 +342,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
             address: mockLocation.address,
             status: 'submitted',
             priority_level: finalAnalysis?.priority_level || 'medium',
-            eco_points: finalAnalysis?.eco_points || 75,
+            eco_points: validatedPoints,
             ai_analysis: finalAnalysis?.analysis || null
           }
         ])
@@ -360,7 +370,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
         status: 'submitted',
         priority: finalAnalysis?.priority_level || 'medium',
         submittedAt: new Date(data.created_at),
-        ecoPoints: finalAnalysis?.eco_points || 75,
+        ecoPoints: validatedPoints,
         aiAnalysis: finalAnalysis?.analysis
       };
 
@@ -369,7 +379,9 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       setImages([]);
       setAiAnalysis(null);
       setActiveTab('complaints');
-      alert('Report submitted successfully! Our AI has analyzed your report and assigned priority level and eco-points.');
+      
+      const priorityText = finalAnalysis?.priority_level || 'medium';
+      alert(`Report submitted successfully! AI classified as ${priorityText} priority and assigned ${validatedPoints} eco-points.`);
 
     } catch (error) {
       console.error('Error submitting report:', error);
@@ -674,6 +686,11 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                       <p><span className="font-medium text-purple-700">Waste Type:</span> {aiAnalysis.analysis.waste_type}</p>
                       <p><span className="font-medium text-purple-700">Severity:</span> {aiAnalysis.analysis.severity}</p>
                       <p><span className="font-medium text-purple-700">Reasoning:</span> {aiAnalysis.analysis.reasoning}</p>
+                    </div>
+                    <div className="mt-4 p-3 bg-white/50 rounded-lg">
+                      <p className="text-xs text-purple-600">
+                        <strong>Points System:</strong> Low=10pts, Medium=20pts, High=30pts, Urgent=40pts
+                      </p>
                     </div>
                   </div>
                 )}

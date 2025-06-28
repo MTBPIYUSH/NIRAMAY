@@ -45,6 +45,7 @@ export interface Complaint {
     cleanup_difficulty: string;
     reasoning: string;
   };
+  ward?: string; // Added for ward-based filtering
 }
 
 export interface SubWorker {
@@ -53,7 +54,7 @@ export interface SubWorker {
   email: string;
   phone: string;
   status: 'available' | 'busy';
-  ward: string;
+  ward: string; // Changed from optional to required for ward-based assignment
   completedTasks: number;
   rating: number;
   currentTask?: string;
