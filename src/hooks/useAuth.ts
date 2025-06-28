@@ -65,8 +65,14 @@ export const useAuth = () => {
     const savedProfile = localStorage.getItem('niramay_profile');
     
     if (savedUser && savedProfile) {
-      setUser(JSON.parse(savedUser));
-      setProfile(JSON.parse(savedProfile));
+      try {
+        setUser(JSON.parse(savedUser));
+        setProfile(JSON.parse(savedProfile));
+      } catch (error) {
+        console.error('Error parsing saved auth data:', error);
+        localStorage.removeItem('niramay_user');
+        localStorage.removeItem('niramay_profile');
+      }
     }
     
     setLoading(false);
@@ -84,7 +90,7 @@ export const useAuth = () => {
       // Check if Aadhar already exists
       const existingProfile = mockProfiles.find(p => p.aadhar === userData.aadhar);
       if (existingProfile) {
-        throw new Error('An account with this Aadhar number already exists');
+        throw new Error('An account with this Aadhaar number already exists');
       }
 
       // Check if email already exists
@@ -118,6 +124,7 @@ export const useAuth = () => {
       localStorage.setItem('niramay_user', JSON.stringify(newUser));
       localStorage.setItem('niramay_profile', JSON.stringify(newProfile));
 
+      // Update state immediately
       setUser(newUser);
       setProfile(newProfile);
 
@@ -153,6 +160,7 @@ export const useAuth = () => {
       localStorage.setItem('niramay_user', JSON.stringify(user));
       localStorage.setItem('niramay_profile', JSON.stringify(userProfile));
 
+      // Update state immediately
       setUser(user);
       setProfile(userProfile);
 

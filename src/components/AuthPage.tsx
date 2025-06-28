@@ -129,6 +129,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             text: 'Account created successfully! Welcome to Niramay.'
           });
 
+          // Call onAuthSuccess immediately since state is already updated in useAuth
           setTimeout(() => {
             onAuthSuccess();
           }, 1500);
@@ -145,6 +146,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             text: 'Login successful! Redirecting to dashboard...'
           });
 
+          // Call onAuthSuccess immediately since state is already updated in useAuth
           setTimeout(() => {
             onAuthSuccess();
           }, 1000);

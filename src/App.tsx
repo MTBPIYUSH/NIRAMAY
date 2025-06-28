@@ -12,11 +12,13 @@ function App() {
 
   useEffect(() => {
     if (user && profile) {
+      // User is authenticated and has a profile - go to dashboard
       setCurrentView('dashboard');
-    } else if (user && !profile) {
-      // User exists but no profile - might be pending verification
-      setCurrentView('auth');
+    } else if (!user && !profile) {
+      // No user - stay on landing page
+      setCurrentView('landing');
     }
+    // If user exists but no profile, stay on current view (shouldn't happen in our mock system)
   }, [user, profile]);
 
   const handleGetStarted = () => {
@@ -24,6 +26,8 @@ function App() {
   };
 
   const handleAuthSuccess = () => {
+    // This will be called after successful login/signup
+    // The useEffect above will handle the actual redirection based on user/profile state
     setCurrentView('dashboard');
   };
 
@@ -45,15 +49,8 @@ function App() {
     );
   }
 
-  if (currentView === 'landing') {
-    return <LandingPage onGetStarted={handleGetStarted} />;
-  }
-
-  if (currentView === 'auth') {
-    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
-  }
-
-  if (currentView === 'dashboard' && profile) {
+  // If user is authenticated, show dashboard regardless of currentView
+  if (user && profile) {
     switch (profile.role) {
       case 'citizen':
         return <CitizenDashboard user={profile} onLogout={handleLogout} />;
@@ -66,6 +63,12 @@ function App() {
     }
   }
 
+  // User is not authenticated - show appropriate view
+  if (currentView === 'auth') {
+    return <AuthPage onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Default to landing page
   return <LandingPage onGetStarted={handleGetStarted} />;
 }
 
