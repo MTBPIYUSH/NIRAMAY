@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Users, AlertTriangle, CheckCircle, Clock, MapPin, Phone, Star, UserCheck } from 'lucide-react';
+import { BarChart3, Users, AlertTriangle, CheckCircle, Clock, MapPin, Phone, Star, UserCheck, X, Eye, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { mockSubWorkers, mockAnalytics } from '../data/mockData';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint, SubWorker } from '../types';
@@ -19,6 +19,10 @@ interface DatabaseReport {
   status: string;
   created_at: string;
   updated_at: string;
+  assigned_to?: string;
+  proof_image?: string;
+  proof_lat?: number;
+  proof_lng?: number;
 }
 
 interface ReporterProfile {
@@ -27,12 +31,47 @@ interface ReporterProfile {
   phone?: string;
 }
 
+interface AssignmentModal {
+  isOpen: boolean;
+  reportId: string;
+  reportTitle: string;
+  workerId: string;
+  workerName: string;
+}
+
+interface DetailModal {
+  isOpen: boolean;
+  report: Complaint | null;
+}
+
+interface ApprovalModal {
+  isOpen: boolean;
+  report: Complaint | null;
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'complaints' | 'workers' | 'analytics'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'complaints' | 'workers' | 'analytics' | 'approvals'>('dashboard');
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [workers, setWorkers] = useState<SubWorker[]>(mockSubWorkers);
   const [loadingReports, setLoadingReports] = useState(false);
   const [reporterProfiles, setReporterProfiles] = useState<Map<string, ReporterProfile>>(new Map());
+  const [assignmentModal, setAssignmentModal] = useState<AssignmentModal>({
+    isOpen: false,
+    reportId: '',
+    reportTitle: '',
+    workerId: '',
+    workerName: ''
+  });
+  const [detailModal, setDetailModal] = useState<DetailModal>({
+    isOpen: false,
+    report: null
+  });
+  const [approvalModal, setApprovalModal] = useState<ApprovalModal>({
+    isOpen: false,
+    report: null
+  });
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [rejectionComment, setRejectionComment] = useState('');
 
   // Fetch reports from database for the admin's region
   useEffect(() => {
@@ -77,22 +116,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       // Convert database reports to complaint format
       const convertedComplaints: Complaint[] = (reportsData || []).map((report: DatabaseReport) => {
         const reporterProfile = profileMap.get(report.user_id);
+        const assignedWorker = workers.find(w => w.id === report.assigned_to);
+        
         return {
           id: report.id,
           userId: report.user_id,
           userName: reporterProfile?.name || 'Unknown User',
           userPhone: reporterProfile?.phone || 'No phone',
-          title: 'Waste Report', // Default title since we don't store it in DB yet
-          description: 'Reported waste issue', // Default description
+          title: 'Waste Report',
+          description: 'Reported waste issue',
           imageUrl: report.images[0] || '',
+          images: report.images || [],
           location: {
             lat: report.lat,
             lng: report.lng,
             address: report.address
           },
-          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
+          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval',
           priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
-          submittedAt: new Date(report.created_at)
+          submittedAt: new Date(report.created_at),
+          assignedTo: report.assigned_to,
+          assignedWorkerName: assignedWorker?.name,
+          proofImage: report.proof_image,
+          proofLocation: report.proof_lat && report.proof_lng ? {
+            lat: report.proof_lat,
+            lng: report.proof_lng,
+            address: 'Proof location'
+          } : undefined
         };
       });
 
@@ -122,6 +172,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       case 'assigned': return 'bg-blue-100 text-blue-800';
       case 'in-progress': return 'bg-orange-100 text-orange-800';
       case 'completed': return 'bg-green-100 text-green-800';
+      case 'submitted_for_approval': return 'bg-purple-100 text-purple-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -136,16 +187,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
-  const assignWorker = async (complaintId: string, workerId: string) => {
+  const openAssignmentModal = (complaintId: string, complaintTitle: string, workerId: string) => {
     const worker = workers.find(w => w.id === workerId);
     if (!worker) return;
 
+    setAssignmentModal({
+      isOpen: true,
+      reportId: complaintId,
+      reportTitle: complaintTitle,
+      workerId: workerId,
+      workerName: worker.name
+    });
+  };
+
+  const confirmAssignment = async () => {
     try {
       // Update the report status in database
       const { error } = await supabase
         .from('reports')
-        .update({ status: 'assigned' })
-        .eq('id', complaintId);
+        .update({ 
+          status: 'assigned',
+          assigned_to: assignmentModal.workerId
+        })
+        .eq('id', assignmentModal.reportId);
 
       if (error) {
         console.error('Error updating report status:', error);
@@ -155,27 +219,135 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
       // Update local state
       setComplaints(prev => prev.map(complaint =>
-        complaint.id === complaintId
-          ? { ...complaint, status: 'assigned', assignedTo: workerId, assignedWorkerName: worker.name }
+        complaint.id === assignmentModal.reportId
+          ? { 
+              ...complaint, 
+              status: 'assigned', 
+              assignedTo: assignmentModal.workerId, 
+              assignedWorkerName: assignmentModal.workerName 
+            }
           : complaint
       ));
 
       setWorkers(prev => prev.map(w =>
-        w.id === workerId
-          ? { ...w, status: 'busy', currentTask: complaintId }
+        w.id === assignmentModal.workerId
+          ? { ...w, status: 'busy', currentTask: assignmentModal.reportId }
           : w
       ));
 
-      alert(`Task assigned to ${worker.name} successfully!`);
+      setAssignmentModal({ isOpen: false, reportId: '', reportTitle: '', workerId: '', workerName: '' });
+      alert(`Task assigned to ${assignmentModal.workerName} successfully!`);
     } catch (error) {
       console.error('Error assigning worker:', error);
       alert('Failed to assign worker. Please try again.');
     }
   };
 
+  const openDetailModal = (complaint: Complaint) => {
+    setDetailModal({ isOpen: true, report: complaint });
+    setCurrentImageIndex(0);
+  };
+
+  const openApprovalModal = (complaint: Complaint) => {
+    setApprovalModal({ isOpen: true, report: complaint });
+    setRejectionComment('');
+  };
+
+  const approveTask = async (reportId: string) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .update({ status: 'completed' })
+        .eq('id', reportId);
+
+      if (error) {
+        console.error('Error approving task:', error);
+        alert('Failed to approve task. Please try again.');
+        return;
+      }
+
+      // Update local state
+      setComplaints(prev => prev.map(complaint =>
+        complaint.id === reportId
+          ? { ...complaint, status: 'completed' }
+          : complaint
+      ));
+
+      // Update worker status back to available
+      const report = complaints.find(c => c.id === reportId);
+      if (report?.assignedTo) {
+        setWorkers(prev => prev.map(w =>
+          w.id === report.assignedTo
+            ? { ...w, status: 'available', currentTask: undefined, completedTasks: w.completedTasks + 1 }
+            : w
+        ));
+      }
+
+      setApprovalModal({ isOpen: false, report: null });
+      alert('Task approved successfully! Rewards have been distributed.');
+    } catch (error) {
+      console.error('Error approving task:', error);
+      alert('Failed to approve task. Please try again.');
+    }
+  };
+
+  const rejectTask = async (reportId: string, comment: string) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .update({ 
+          status: 'assigned',
+          proof_image: null,
+          proof_lat: null,
+          proof_lng: null
+        })
+        .eq('id', reportId);
+
+      if (error) {
+        console.error('Error rejecting task:', error);
+        alert('Failed to reject task. Please try again.');
+        return;
+      }
+
+      // Update local state
+      setComplaints(prev => prev.map(complaint =>
+        complaint.id === reportId
+          ? { 
+              ...complaint, 
+              status: 'assigned',
+              proofImage: undefined,
+              proofLocation: undefined
+            }
+          : complaint
+      ));
+
+      setApprovalModal({ isOpen: false, report: null });
+      alert(`Task rejected. Sub-worker has been notified to retry. Comment: ${comment}`);
+    } catch (error) {
+      console.error('Error rejecting task:', error);
+      alert('Failed to reject task. Please try again.');
+    }
+  };
+
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lng2-lng1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+    return R * c; // Distance in meters
+  };
+
   const pendingComplaints = complaints.filter(c => c.status === 'submitted');
   const completedComplaints = complaints.filter(c => c.status === 'completed');
   const availableWorkers = workers.filter(w => w.status === 'available');
+  const approvalRequests = complaints.filter(c => c.status === 'submitted_for_approval');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100">
@@ -208,6 +380,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
             { id: 'complaints', label: 'Complaints', icon: AlertTriangle },
+            { id: 'approvals', label: `Approvals ${approvalRequests.length > 0 ? `(${approvalRequests.length})` : ''}`, icon: CheckCircle },
             { id: 'workers', label: 'Workers', icon: Users },
             { id: 'analytics', label: 'Analytics', icon: BarChart3 }
           ].map(tab => {
@@ -215,7 +388,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as 'dashboard' | 'complaints' | 'workers' | 'analytics')}
+                onClick={() => setActiveTab(tab.id as any)}
                 className={`flex items-center px-4 py-2 rounded-lg font-medium transition-all ${
                   activeTab === tab.id
                     ? 'bg-white text-blue-600 shadow-sm'
@@ -233,7 +406,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
               <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
                 <div className="flex items-center justify-between">
                   <div>
@@ -281,6 +454,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                   </div>
                 </div>
               </div>
+
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Pending Approvals</p>
+                    <p className="text-2xl font-bold text-gray-900">{approvalRequests.length}</p>
+                  </div>
+                  <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                    <Eye className="text-orange-600" size={24} />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Recent Activity */}
@@ -299,7 +484,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                         <img
                           src={complaint.imageUrl}
                           alt="Complaint"
-                          className="w-12 h-12 rounded-lg object-cover"
+                          className="w-12 h-12 rounded-lg object-cover cursor-pointer"
+                          onClick={() => openDetailModal(complaint)}
                         />
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-800">{complaint.title}</h4>
@@ -374,7 +560,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                       <img
                         src={complaint.imageUrl}
                         alt="Complaint"
-                        className="w-full lg:w-64 h-48 object-cover rounded-xl"
+                        className="w-full lg:w-64 h-48 object-cover rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => openDetailModal(complaint)}
                       />
                       
                       <div className="flex-1 space-y-4">
@@ -388,7 +575,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                           </div>
                           <div className="flex space-x-2">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
-                              {complaint.status}
+                              {complaint.status.replace('_', ' ')}
                             </span>
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
                               {complaint.priority}
@@ -408,10 +595,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                             Submitted: {complaint.submittedAt.toLocaleDateString()}
                           </span>
                           
-                          {complaint.status === 'submitted' && availableWorkers.length > 0 && (
-                            <div className="flex items-center space-x-2">
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => openDetailModal(complaint)}
+                              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
+                            >
+                              View Details
+                            </button>
+                            
+                            {complaint.status === 'submitted' && availableWorkers.length > 0 && (
                               <select
-                                onChange={(e) => e.target.value && assignWorker(complaint.id, e.target.value)}
+                                onChange={(e) => e.target.value && openAssignmentModal(complaint.id, complaint.title, e.target.value)}
                                 className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 defaultValue=""
                               >
@@ -422,21 +616,129 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                                   </option>
                                 ))}
                               </select>
-                            </div>
-                          )}
+                            )}
 
-                          {complaint.status === 'submitted' && availableWorkers.length === 0 && (
-                            <div className="text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
-                              No workers available
+                            {complaint.status === 'submitted' && availableWorkers.length === 0 && (
+                              <div className="text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
+                                No workers available
+                              </div>
+                            )}
+                            
+                            {complaint.assignedWorkerName && (
+                              <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
+                                Assigned to: {complaint.assignedWorkerName}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Approvals Tab */}
+        {activeTab === 'approvals' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-gray-800">Task Approvals</h2>
+              <div className="text-sm text-gray-600">
+                {approvalRequests.length} pending approvals
+              </div>
+            </div>
+            
+            {approvalRequests.length === 0 ? (
+              <div className="bg-white rounded-2xl p-12 shadow-lg border border-gray-100 text-center">
+                <CheckCircle size={64} className="text-gray-400 mx-auto mb-6" />
+                <h3 className="text-2xl font-bold text-gray-600 mb-4">No pending approvals</h3>
+                <p className="text-gray-500">All submitted tasks have been reviewed.</p>
+              </div>
+            ) : (
+              <div className="grid gap-6">
+                {approvalRequests.map(request => (
+                  <div key={request.id} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="text-xl font-semibold text-gray-800">{request.title}</h3>
+                          <p className="text-gray-600">Reporter: {request.userName} ({request.userPhone})</p>
+                          <p className="text-gray-600">Worker: {request.assignedWorkerName}</p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
+                          Awaiting Approval
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Original Report */}
+                        <div>
+                          <h4 className="font-semibold text-gray-800 mb-3">Original Report</h4>
+                          <img
+                            src={request.imageUrl}
+                            alt="Original Report"
+                            className="w-full h-48 object-cover rounded-xl mb-3"
+                          />
+                          <div className="bg-blue-50 p-3 rounded-lg">
+                            <div className="flex items-center text-blue-700">
+                              <MapPin size={16} className="mr-2" />
+                              <span className="text-sm">{request.location.address}</span>
                             </div>
+                          </div>
+                        </div>
+
+                        {/* Proof Submission */}
+                        <div>
+                          <h4 className="font-semibold text-gray-800 mb-3">Proof of Completion</h4>
+                          {request.proofImage && (
+                            <img
+                              src={request.proofImage}
+                              alt="Proof of Completion"
+                              className="w-full h-48 object-cover rounded-xl mb-3"
+                            />
                           )}
-                          
-                          {complaint.assignedWorkerName && (
-                            <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
-                              Assigned to: {complaint.assignedWorkerName}
+                          {request.proofLocation && (
+                            <div className="bg-green-50 p-3 rounded-lg">
+                              <div className="flex items-center text-green-700">
+                                <MapPin size={16} className="mr-2" />
+                                <span className="text-sm">
+                                  Proof location ({request.proofLocation.lat.toFixed(6)}, {request.proofLocation.lng.toFixed(6)})
+                                </span>
+                              </div>
+                              {request.proofLocation && (
+                                <div className="mt-2 text-sm text-green-600">
+                                  Distance from original: {
+                                    calculateDistance(
+                                      request.location.lat,
+                                      request.location.lng,
+                                      request.proofLocation.lat,
+                                      request.proofLocation.lng
+                                    ).toFixed(0)
+                                  }m
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
+                      </div>
+
+                      <div className="flex justify-end space-x-4">
+                        <button
+                          onClick={() => openApprovalModal(request)}
+                          className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center"
+                        >
+                          <ThumbsDown size={16} className="mr-2" />
+                          Reject
+                        </button>
+                        <button
+                          onClick={() => approveTask(request.id)}
+                          className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center"
+                        >
+                          <ThumbsUp size={16} className="mr-2" />
+                          Approve
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -560,6 +862,155 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </div>
         )}
       </div>
+
+      {/* Assignment Confirmation Modal */}
+      {assignmentModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Confirm Assignment</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to assign report "{assignmentModal.reportTitle}" to {assignmentModal.workerName}?
+            </p>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setAssignmentModal({ isOpen: false, reportId: '', reportTitle: '', workerId: '', workerName: '' })}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAssignment}
+                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {detailModal.isOpen && detailModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Report Details</h3>
+              <button
+                onClick={() => setDetailModal({ isOpen: false, report: null })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              {/* Images Carousel */}
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-3">Images ({detailModal.report.images?.length || 1})</h4>
+                <div className="relative">
+                  <img
+                    src={detailModal.report.images?.[currentImageIndex] || detailModal.report.imageUrl}
+                    alt={`Report image ${currentImageIndex + 1}`}
+                    className="w-full h-64 object-cover rounded-xl"
+                  />
+                  {detailModal.report.images && detailModal.report.images.length > 1 && (
+                    <div className="flex justify-center mt-4 space-x-2">
+                      {detailModal.report.images.map((_, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCurrentImageIndex(index)}
+                          className={`w-3 h-3 rounded-full ${
+                            index === currentImageIndex ? 'bg-blue-500' : 'bg-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Report Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Reporter Information</h4>
+                  <div className="space-y-2">
+                    <p><span className="font-medium">Name:</span> {detailModal.report.userName}</p>
+                    <p><span className="font-medium">Phone:</span> {detailModal.report.userPhone}</p>
+                    <p><span className="font-medium">Submitted:</span> {detailModal.report.submittedAt.toLocaleDateString()}</p>
+                  </div>
+                </div>
+                
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Report Status</h4>
+                  <div className="space-y-2">
+                    <p><span className="font-medium">Status:</span> 
+                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(detailModal.report.status)}`}>
+                        {detailModal.report.status.replace('_', ' ')}
+                      </span>
+                    </p>
+                    <p><span className="font-medium">Priority:</span> 
+                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(detailModal.report.priority)}`}>
+                        {detailModal.report.priority}
+                      </span>
+                    </p>
+                    {detailModal.report.assignedWorkerName && (
+                      <p><span className="font-medium">Assigned to:</span> {detailModal.report.assignedWorkerName}</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Location Map */}
+              <div>
+                <h4 className="font-semibold text-gray-800 mb-3">Location</h4>
+                <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="flex items-center text-blue-700">
+                    <MapPin size={20} className="mr-2" />
+                    <span>{detailModal.report.location.address}</span>
+                  </div>
+                  <p className="text-sm text-blue-600 mt-2">
+                    Coordinates: {detailModal.report.location.lat.toFixed(6)}, {detailModal.report.location.lng.toFixed(6)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Approval Modal */}
+      {approvalModal.isOpen && approvalModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Reject Task</h3>
+            <p className="text-gray-600 mb-4">
+              Please provide a reason for rejecting this task completion:
+            </p>
+            <textarea
+              value={rejectionComment}
+              onChange={(e) => setRejectionComment(e.target.value)}
+              placeholder="Enter rejection reason..."
+              className="w-full p-3 border border-gray-300 rounded-lg mb-6 resize-none"
+              rows={4}
+            />
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setApprovalModal({ isOpen: false, report: null })}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => rejectTask(approvalModal.report!.id, rejectionComment)}
+                disabled={!rejectionComment.trim()}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Reject Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

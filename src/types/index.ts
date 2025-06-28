@@ -17,18 +17,26 @@ export interface Complaint {
   title: string;
   description: string;
   imageUrl: string;
+  images?: string[];
   location: {
     lat: number;
     lng: number;
     address: string;
   };
-  status: 'submitted' | 'assigned' | 'in-progress' | 'completed';
+  status: 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval';
   priority: 'low' | 'medium' | 'high' | 'critical';
   assignedTo?: string;
   assignedWorkerName?: string;
   submittedAt: Date;
   completedAt?: Date;
   pointsAwarded?: number;
+  proofImage?: string;
+  proofLocation?: {
+    lat: number;
+    lng: number;
+    address: string;
+  };
+  rejectionComment?: string;
 }
 
 export interface SubWorker {
