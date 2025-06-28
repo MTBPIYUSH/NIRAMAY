@@ -14,10 +14,10 @@ export const useAuth = () => {
     // Get initial session with timeout and error handling
     const getInitialSession = async () => {
       try {
-        // Set a timeout for the session check - increased to 20 seconds
+        // Set a timeout for the session check - increased to 60 seconds
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 20000)
+          setTimeout(() => reject(new Error('Session check timeout')), 60000)
         );
 
         const { data: { session }, error } = await Promise.race([
@@ -125,7 +125,7 @@ export const useAuth = () => {
     try {
       console.log('Fetching profile for user:', userId);
       
-      // Add timeout to profile fetch - increased to 20 seconds
+      // Add timeout to profile fetch - increased to 60 seconds
       const profilePromise = supabase
         .from('profiles')
         .select('*')
@@ -133,7 +133,7 @@ export const useAuth = () => {
         .single();
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 20000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 60000)
       );
 
       const { data, error } = await Promise.race([
