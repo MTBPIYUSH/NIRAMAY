@@ -21,6 +21,13 @@ export interface ValidationResult {
   reason?: string;
 }
 
+export interface SubWorkerStats {
+  total: number;
+  available: number;
+  busy: number;
+  offline: number;
+}
+
 export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
   try {
     console.log('Fetching subworker profiles...');
@@ -75,6 +82,89 @@ export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
     console.error('Error in fetchSubWorkers:', err);
     return [];
   }
+};
+
+export const filterSubWorkers = (
+  subworkers: SubWorkerProfile[],
+  filters: {
+    status?: string;
+    ward?: string;
+    city?: string;
+    searchTerm?: string;
+  }
+): SubWorkerProfile[] => {
+  return subworkers.filter(worker => {
+    // Status filter
+    if (filters.status && filters.status !== 'all' && worker.status !== filters.status) {
+      return false;
+    }
+
+    // Ward filter
+    if (filters.ward && filters.ward !== 'all' && worker.assigned_ward !== filters.ward) {
+      return false;
+    }
+
+    // City filter
+    if (filters.city && filters.city !== 'all' && worker.city !== filters.city) {
+      return false;
+    }
+
+    // Search term filter
+    if (filters.searchTerm) {
+      const searchLower = filters.searchTerm.toLowerCase();
+      const matchesName = worker.name.toLowerCase().includes(searchLower);
+      const matchesPhone = worker.phone?.toLowerCase().includes(searchLower);
+      const matchesWard = worker.ward?.toLowerCase().includes(searchLower);
+      const matchesCity = worker.city?.toLowerCase().includes(searchLower);
+      
+      if (!matchesName && !matchesPhone && !matchesWard && !matchesCity) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+};
+
+export const sortSubWorkers = (
+  subworkers: SubWorkerProfile[],
+  sortBy: 'name' | 'status' | 'ward' | 'completions' | 'points',
+  sortOrder: 'asc' | 'desc' = 'asc'
+): SubWorkerProfile[] => {
+  return [...subworkers].sort((a, b) => {
+    let comparison = 0;
+
+    switch (sortBy) {
+      case 'name':
+        comparison = a.name.localeCompare(b.name);
+        break;
+      case 'status':
+        comparison = a.status.localeCompare(b.status);
+        break;
+      case 'ward':
+        comparison = (a.assigned_ward || '').localeCompare(b.assigned_ward || '');
+        break;
+      case 'completions':
+        comparison = a.task_completion_count - b.task_completion_count;
+        break;
+      case 'points':
+        comparison = (a.eco_points || 0) - (b.eco_points || 0);
+        break;
+      default:
+        return 0;
+    }
+
+    return sortOrder === 'desc' ? -comparison : comparison;
+  });
+};
+
+export const getSubWorkerStats = (subworkers: SubWorkerProfile[]): SubWorkerStats => {
+  return {
+    total: subworkers.length,
+    available: subworkers.filter(w => w.status === 'available').length,
+    busy: subworkers.filter(w => w.status === 'busy').length,
+    offline: subworkers.filter(w => w.status === 'offline').length
+  };
 };
 
 export const validateWorkerAssignment = async (
