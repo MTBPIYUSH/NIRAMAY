@@ -11,27 +11,33 @@ function App() {
   const { user, profile, loading, signOut } = useAuth();
 
   useEffect(() => {
+    console.log('App useEffect - User:', user?.email, 'Profile:', profile?.role);
+    
     if (user && profile) {
-      // User is authenticated and has a profile - go to dashboard
+      // User is authenticated and has a profile - redirect to appropriate dashboard
+      console.log('Redirecting to dashboard for role:', profile.role);
       setCurrentView('dashboard');
     } else if (!user && !profile) {
       // No user - stay on landing page
+      console.log('No user, staying on landing page');
       setCurrentView('landing');
     }
-    // If user exists but no profile, stay on current view (shouldn't happen in our mock system)
+    // If user exists but no profile, stay on current view (loading state)
   }, [user, profile]);
 
   const handleGetStarted = () => {
+    console.log('Get started clicked');
     setCurrentView('auth');
   };
 
   const handleAuthSuccess = () => {
-    // This will be called after successful login/signup
+    console.log('Auth success callback triggered');
     // The useEffect above will handle the actual redirection based on user/profile state
-    setCurrentView('dashboard');
+    // We don't need to manually set the view here as it will be handled reactively
   };
 
   const handleLogout = async () => {
+    console.log('Logout initiated');
     await signOut();
     setCurrentView('landing');
   };
@@ -51,6 +57,7 @@ function App() {
 
   // If user is authenticated, show dashboard regardless of currentView
   if (user && profile) {
+    console.log('Rendering dashboard for role:', profile.role);
     switch (profile.role) {
       case 'citizen':
         return <CitizenDashboard user={profile} onLogout={handleLogout} />;
@@ -59,6 +66,7 @@ function App() {
       case 'subworker':
         return <SubWorkerDashboard user={profile} onLogout={handleLogout} />;
       default:
+        console.log('Unknown role, showing landing page');
         return <LandingPage onGetStarted={handleGetStarted} />;
     }
   }

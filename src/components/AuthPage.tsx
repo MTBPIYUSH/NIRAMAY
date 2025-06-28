@@ -12,8 +12,7 @@ import {
   EyeOff,
   ArrowRight,
   AlertCircle,
-  CheckCircle,
-  UserCheck
+  CheckCircle
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -116,43 +115,54 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
           }
 
           // Citizen sign up
+          console.log('Attempting citizen signup');
           const { data, error } = await signUp(formData.email, formData.password, {
             name: formData.name,
             aadhar: formData.aadhar,
             phone: formData.phone
           });
 
-          if (error) throw error;
+          if (error) {
+            console.error('Signup error:', error);
+            throw error;
+          }
 
+          console.log('Signup successful:', data);
           setMessage({
             type: 'success',
             text: 'Account created successfully! Welcome to Niramay.'
           });
 
-          // Call onAuthSuccess immediately since state is already updated in useAuth
+          // Call onAuthSuccess after a short delay to show success message
           setTimeout(() => {
             onAuthSuccess();
           }, 1500);
         }
       } else {
         // Sign in
+        console.log('Attempting signin for:', formData.email);
         const { data, error } = await signIn(formData.email, formData.password);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Signin error:', error);
+          throw error;
+        }
 
         if (data.user) {
+          console.log('Signin successful for:', data.user.email);
           setMessage({
             type: 'success',
             text: 'Login successful! Redirecting to dashboard...'
           });
 
-          // Call onAuthSuccess immediately since state is already updated in useAuth
+          // Call onAuthSuccess after a short delay to show success message
           setTimeout(() => {
             onAuthSuccess();
           }, 1000);
         }
       }
     } catch (error: any) {
+      console.error('Auth error:', error);
       setMessage({
         type: 'error',
         text: error.message || 'An error occurred. Please try again.'
@@ -394,7 +404,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder={selectedRole === 'citizen' ? 'your.email@gmail.com' : 'your.email@domain.com'}
+                    placeholder="your.email@domain.com"
                     required
                   />
                 </div>
@@ -489,17 +499,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       </>
                     )}
                   </div>
-                </div>
-              </div>
-            )}
-
-            {/* Demo Credentials */}
-            {!currentRole.canSignUp && (
-              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                <div className="text-xs text-blue-700">
-                  <strong>Demo Credentials:</strong><br />
-                  Email: {selectedRole === 'admin' ? 'admin@niramay.gov.in' : 'worker@niramay.gov.in'}<br />
-                  Password: password123
                 </div>
               </div>
             )}

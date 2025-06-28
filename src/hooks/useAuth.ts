@@ -1,58 +1,6 @@
 import { useState, useEffect } from 'react';
-
-export interface Profile {
-  id: string;
-  role: 'citizen' | 'admin' | 'subworker';
-  aadhar?: string;
-  name: string;
-  phone?: string;
-  ward?: string;
-  city?: string;
-  points?: number;
-  email: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface User {
-  id: string;
-  email: string;
-}
-
-// Mock data for demo purposes
-const mockProfiles: Profile[] = [
-  {
-    id: '1',
-    role: 'citizen',
-    name: 'Arjun Sharma',
-    email: 'arjun@example.com',
-    aadhar: '123456789012',
-    phone: '9876543210',
-    points: 1250,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '2',
-    role: 'admin',
-    name: 'Priya Patel',
-    email: 'admin@niramay.gov.in',
-    ward: 'Ward 12',
-    city: 'Gurgaon',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '3',
-    role: 'subworker',
-    name: 'Ravi Kumar',
-    email: 'worker@niramay.gov.in',
-    ward: 'Ward 12',
-    city: 'Gurgaon',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-];
+import { User } from '@supabase/supabase-js';
+import { supabase, Profile } from '../lib/supabase';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -60,126 +8,167 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session
-    const savedUser = localStorage.getItem('niramay_user');
-    const savedProfile = localStorage.getItem('niramay_profile');
-    
-    if (savedUser && savedProfile) {
+    // Get initial session
+    const getInitialSession = async () => {
       try {
-        setUser(JSON.parse(savedUser));
-        setProfile(JSON.parse(savedProfile));
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        }
       } catch (error) {
-        console.error('Error parsing saved auth data:', error);
-        localStorage.removeItem('niramay_user');
-        localStorage.removeItem('niramay_profile');
+        console.error('Error getting session:', error);
+      } finally {
+        setLoading(false);
       }
-    }
-    
-    setLoading(false);
+    };
+
+    getInitialSession();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        } else {
+          setProfile(null);
+        }
+        
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
+
+  const fetchProfile = async (userId: string) => {
+    try {
+      console.log('Fetching profile for user:', userId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching profile:', error);
+        return;
+      }
+
+      console.log('Profile fetched:', data);
+      setProfile(data);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+    }
+  };
 
   const signUp = async (email: string, password: string, userData: {
     name: string;
     aadhar: string;
-    phone: string;
+    phone?: string;
   }) => {
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Check if Aadhar already exists
-      const existingProfile = mockProfiles.find(p => p.aadhar === userData.aadhar);
-      if (existingProfile) {
-        throw new Error('An account with this Aadhaar number already exists');
-      }
-
-      // Check if email already exists
-      const existingEmail = mockProfiles.find(p => p.email === email);
-      if (existingEmail) {
-        throw new Error('An account with this email already exists');
-      }
-
-      // Create new user and profile
-      const newUser: User = {
-        id: Date.now().toString(),
-        email
-      };
-
-      const newProfile: Profile = {
-        id: newUser.id,
-        role: 'citizen',
-        name: userData.name,
+      console.log('Starting signup process for:', email);
+      
+      // First, sign up the user with Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
-        aadhar: userData.aadhar,
-        phone: userData.phone,
-        points: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
+        password,
+        options: {
+          data: {
+            name: userData.name,
+            aadhar: userData.aadhar,
+            phone: userData.phone,
+            role: 'citizen'
+          }
+        }
+      });
 
-      // Add to mock data
-      mockProfiles.push(newProfile);
+      if (authError) {
+        console.error('Auth signup error:', authError);
+        throw authError;
+      }
 
-      // Save to localStorage
-      localStorage.setItem('niramay_user', JSON.stringify(newUser));
-      localStorage.setItem('niramay_profile', JSON.stringify(newProfile));
+      console.log('Auth signup successful:', authData.user?.email);
 
-      // Update state immediately
-      setUser(newUser);
-      setProfile(newProfile);
+      // Create profile after successful auth signup
+      if (authData.user) {
+        console.log('Creating profile for user:', authData.user.id);
+        
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .insert([
+            {
+              id: authData.user.id,
+              role: 'citizen',
+              name: userData.name,
+              aadhar: userData.aadhar,
+              phone: userData.phone,
+            }
+          ])
+          .select()
+          .single();
 
-      return { data: { user: newUser }, error: null };
+        if (profileError) {
+          console.error('Error creating profile:', profileError);
+          throw profileError;
+        }
+
+        console.log('Profile created successfully:', profileData);
+        
+        // Set the profile immediately
+        setProfile(profileData);
+      }
+
+      return { data: authData, error: null };
     } catch (error: any) {
+      console.error('Signup error:', error);
       return { data: null, error };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Find user profile
-      const userProfile = mockProfiles.find(p => p.email === email);
+      console.log('Starting signin process for:', email);
       
-      if (!userProfile) {
-        throw new Error('Invalid email or password');
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        console.error('Signin error:', error);
+        throw error;
       }
 
-      // Simulate password validation (in real app, this would be handled by backend)
-      if (password.length < 6) {
-        throw new Error('Invalid email or password');
-      }
+      console.log('Signin successful:', data.user?.email);
 
-      const user: User = {
-        id: userProfile.id,
-        email: userProfile.email
-      };
-
-      // Save to localStorage
-      localStorage.setItem('niramay_user', JSON.stringify(user));
-      localStorage.setItem('niramay_profile', JSON.stringify(userProfile));
-
-      // Update state immediately
-      setUser(user);
-      setProfile(userProfile);
-
-      return { data: { user }, error: null };
+      // Profile will be fetched automatically by the auth state change listener
+      return { data, error: null };
     } catch (error: any) {
+      console.error('Signin error:', error);
       return { data: null, error };
     }
   };
 
   const signOut = async () => {
     try {
-      localStorage.removeItem('niramay_user');
-      localStorage.removeItem('niramay_profile');
+      console.log('Signing out user');
+      
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
       
       setUser(null);
       setProfile(null);
       
+      console.log('Signout successful');
       return { error: null };
     } catch (error: any) {
+      console.error('Signout error:', error);
       return { error };
     }
   };
