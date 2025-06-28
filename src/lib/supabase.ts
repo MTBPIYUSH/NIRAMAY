@@ -19,6 +19,8 @@ export type Profile = {
   ward?: string;
   city?: string;
   points?: number;
+  eco_points?: number;
+  status?: string;
   created_at: string;
   updated_at: string;
 };

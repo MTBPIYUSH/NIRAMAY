@@ -24,12 +24,13 @@ export interface Complaint {
     address: string;
   };
   status: 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval';
-  priority: 'low' | 'medium' | 'high' | 'critical';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
   assignedTo?: string;
   assignedWorkerName?: string;
   submittedAt: Date;
   completedAt?: Date;
   pointsAwarded?: number;
+  ecoPoints?: number;
   proofImage?: string;
   proofLocation?: {
     lat: number;
@@ -37,6 +38,13 @@ export interface Complaint {
     address: string;
   };
   rejectionComment?: string;
+  aiAnalysis?: {
+    waste_type: string;
+    severity: string;
+    environmental_impact: string;
+    cleanup_difficulty: string;
+    reasoning: string;
+  };
 }
 
 export interface SubWorker {

@@ -15,10 +15,15 @@ import {
   Calendar,
   Target,
   Zap,
-  Upload
+  Upload,
+  Bell,
+  X,
+  Sparkles
 } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
+import { analyzeWasteReport, validateImageForAnalysis } from '../lib/gemini';
+import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, Notification } from '../lib/notifications';
 
 interface CitizenDashboardProps {
   user: Profile;
@@ -29,10 +34,10 @@ interface EcoProduct {
   id: string;
   name: string;
   description: string;
-  points: number;
+  point_cost: number;
   image_url: string;
   category: string;
-  stock: number;
+  quantity: number;
 }
 
 interface DatabaseReport {
@@ -45,31 +50,38 @@ interface DatabaseReport {
   status: string;
   created_at: string;
   updated_at: string;
+  priority_level?: string;
+  eco_points?: number;
+  ai_analysis?: any;
 }
 
 export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogout }) => {
   // Default to 'report' tab for citizens as per requirements
   const [activeTab, setActiveTab] = useState<'dashboard' | 'report' | 'complaints' | 'store'>('report');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [ecoProducts, setEcoProducts] = useState<EcoProduct[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingReports, setLoadingReports] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [analyzingWithAI, setAnalyzingWithAI] = useState(false);
   const [newComplaint, setNewComplaint] = useState<Partial<Complaint>>({
     title: '',
-    description: '',
-    priority: 'medium',
-    imageUrl: ''
+    description: ''
   });
   const [images, setImages] = useState<string[]>([]);
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
 
   const userComplaints = complaints.filter(c => c.userId === user.id);
+  const unreadNotifications = notifications.filter(n => !n.is_read);
 
   // Fetch user's reports from database
   useEffect(() => {
     fetchUserReports();
     fetchEcoProducts();
+    fetchNotifications();
   }, [user.id]);
 
   const fetchUserReports = async () => {
@@ -91,17 +103,20 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
         id: report.id,
         userId: report.user_id,
         userName: user.name,
-        title: 'Waste Report', // Default title since we don't store it in DB yet
-        description: 'Reported waste issue', // Default description
+        title: 'Waste Report',
+        description: 'Reported waste issue',
         imageUrl: report.images[0] || '',
+        images: report.images || [],
         location: {
           lat: report.lat,
           lng: report.lng,
           address: report.address
         },
         status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
-        priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
-        submittedAt: new Date(report.created_at)
+        priority: (report.priority_level as 'low' | 'medium' | 'high' | 'critical') || 'medium',
+        submittedAt: new Date(report.created_at),
+        ecoPoints: report.eco_points,
+        aiAnalysis: report.ai_analysis
       }));
 
       setComplaints(convertedComplaints);
@@ -117,9 +132,10 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     setLoadingProducts(true);
     try {
       const { data, error } = await supabase
-        .from('eco_products')
+        .from('eco_store_items')
         .select('*')
-        .order('points', { ascending: true });
+        .eq('is_active', true)
+        .order('point_cost', { ascending: true });
 
       if (error) {
         console.error('Error fetching eco-products:', error);
@@ -132,6 +148,34 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     } finally {
       setLoadingProducts(false);
     }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const notifications = await getUserNotifications(user.id);
+      setNotifications(notifications);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.is_read) {
+      await markNotificationAsRead(notification.id);
+      setNotifications(prev => 
+        prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n)
+      );
+    }
+
+    // Navigate to related content if applicable
+    if (notification.related_report_id) {
+      setActiveTab('complaints');
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    await markAllNotificationsAsRead(user.id);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
   };
 
   const getStatusColor = (status: string) => {
@@ -159,28 +203,59 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       case 'low': return 'bg-green-100 text-green-800 border-green-200';
       case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'critical': return 'bg-red-100 text-red-800 border-red-200';
+      case 'urgent': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
   // Handle file input for camera - ONLY camera input, no file selection
-  const handleImageCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
 
-    Array.from(files).forEach(file => {
-      if (images.length >= 4) return;
-      
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        if (result && images.length < 4) {
-          setImages(prev => [...prev, result]);
+    const file = files[0];
+    if (!file) return;
+
+    if (images.length >= 4) {
+      alert('Maximum 4 images allowed');
+      return;
+    }
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      const result = e.target?.result as string;
+      if (result && images.length < 4) {
+        setImages(prev => [...prev, result]);
+
+        // Analyze the first image with AI
+        if (images.length === 0 && validateImageForAnalysis(result)) {
+          setAnalyzingWithAI(true);
+          try {
+            // Mock location for demo - in real app, use geolocation API
+            const mockLocation = {
+              lat: 28.4595 + Math.random() * 0.01,
+              lng: 77.0266 + Math.random() * 0.01,
+              address: `${user.ward || 'Auto-detected location'}, ${user.city || 'Gurgaon'}`
+            };
+
+            const analysis = await analyzeWasteReport(result, mockLocation, newComplaint.description);
+            setAiAnalysis(analysis);
+            
+            // Update the complaint with AI suggestions
+            setNewComplaint(prev => ({
+              ...prev,
+              priority: analysis.priority_level,
+              ecoPoints: analysis.eco_points
+            }));
+          } catch (error) {
+            console.error('Error analyzing image with AI:', error);
+          } finally {
+            setAnalyzingWithAI(false);
+          }
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      }
+    };
+    reader.readAsDataURL(file);
 
     // Reset the input
     event.target.value = '';
@@ -188,6 +263,16 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
   const removeImage = (index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
+    
+    // Clear AI analysis if removing the first image
+    if (index === 0) {
+      setAiAnalysis(null);
+      setNewComplaint(prev => ({
+        ...prev,
+        priority: 'medium',
+        ecoPoints: undefined
+      }));
+    }
   };
 
   const handleSubmitComplaint = async () => {
@@ -206,17 +291,42 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
         address: `${user.ward || 'Auto-detected location'}, ${user.city || 'Gurgaon'}`
       };
 
-      // Insert report into database
+      // If no AI analysis yet, analyze the first image
+      let finalAnalysis = aiAnalysis;
+      if (!finalAnalysis && images.length > 0) {
+        try {
+          finalAnalysis = await analyzeWasteReport(images[0], mockLocation, newComplaint.description);
+        } catch (error) {
+          console.error('Error with AI analysis during submission:', error);
+          // Use default values if AI fails
+          finalAnalysis = {
+            priority_level: 'medium',
+            eco_points: 75,
+            analysis: {
+              waste_type: 'General waste',
+              severity: 'Moderate',
+              environmental_impact: 'Standard cleanup required',
+              cleanup_difficulty: 'Medium effort',
+              reasoning: 'AI analysis unavailable, using default assessment'
+            }
+          };
+        }
+      }
+
+      // Insert report into database with AI analysis
       const { data, error } = await supabase
         .from('reports')
         .insert([
           {
             user_id: user.id,
-            images: images, // Store all images as array
+            images: images,
             lat: mockLocation.lat,
             lng: mockLocation.lng,
             address: mockLocation.address,
-            status: 'submitted'
+            status: 'submitted',
+            priority_level: finalAnalysis?.priority_level || 'medium',
+            eco_points: finalAnalysis?.eco_points || 75,
+            ai_analysis: finalAnalysis?.analysis || null
           }
         ])
         .select()
@@ -238,17 +348,21 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
         title: newComplaint.title || '',
         description: newComplaint.description || '',
         imageUrl: images[0],
+        images: images,
         location: mockLocation,
         status: 'submitted',
-        priority: (newComplaint.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
-        submittedAt: new Date(data.created_at)
+        priority: finalAnalysis?.priority_level || 'medium',
+        submittedAt: new Date(data.created_at),
+        ecoPoints: finalAnalysis?.eco_points || 75,
+        aiAnalysis: finalAnalysis?.analysis
       };
 
       setComplaints((prev: Complaint[]) => [newComplaintData, ...prev]);
-      setNewComplaint(() => ({ title: '', description: '', priority: 'medium', imageUrl: '' }));
+      setNewComplaint(() => ({ title: '', description: '' }));
       setImages([]);
+      setAiAnalysis(null);
       setActiveTab('complaints');
-      alert('Report submitted successfully! Our team will review it shortly.');
+      alert('Report submitted successfully! Our AI has analyzed your report and assigned priority level and eco-points.');
 
     } catch (error) {
       console.error('Error submitting report:', error);
@@ -280,8 +394,73 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               {/* Eco Points Display */}
               <div className="hidden sm:flex items-center bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 py-2 rounded-full shadow-lg">
                 <Award size={18} className="mr-2" />
-                <span className="font-bold">{user.points || 0}</span>
+                <span className="font-bold">{user.eco_points || 0}</span>
                 <span className="text-xs ml-1 opacity-90">points</span>
+              </div>
+
+              {/* Notifications */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                >
+                  <Bell size={20} className="text-gray-600" />
+                  {unreadNotifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadNotifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 max-h-96 overflow-y-auto">
+                    <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+                      <h3 className="font-semibold text-gray-800">Notifications</h3>
+                      {unreadNotifications.length > 0 && (
+                        <button
+                          onClick={handleMarkAllAsRead}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          Mark all read
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">
+                          No notifications yet
+                        </div>
+                      ) : (
+                        notifications.map(notification => (
+                          <div
+                            key={notification.id}
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`p-3 border-b border-gray-50 cursor-pointer hover:bg-gray-50 ${
+                              !notification.is_read ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <h4 className="font-medium text-gray-800 text-sm">
+                                  {notification.title}
+                                </h4>
+                                <p className="text-gray-600 text-xs mt-1">
+                                  {notification.message}
+                                </p>
+                                <p className="text-gray-400 text-xs mt-1">
+                                  {new Date(notification.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              {!notification.is_read && (
+                                <div className="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1"></div>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* User Dropdown */}
@@ -359,6 +538,10 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                 </div>
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">Report Garbage Issue</h2>
                 <p className="text-gray-600">Help keep our community clean by reporting waste issues</p>
+                <div className="flex items-center justify-center mt-4 text-sm text-purple-600 bg-purple-50 px-4 py-2 rounded-full">
+                  <Sparkles size={16} className="mr-2" />
+                  AI-Powered Priority & Reward Analysis
+                </div>
               </div>
               
               <div className="space-y-6">
@@ -382,20 +565,6 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                     rows={4}
                     className="w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-100 focus:border-green-500 transition-all resize-none"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">Priority Level</label>
-                  <select
-                    value={newComplaint.priority}
-                    onChange={(e) => setNewComplaint(prev => ({ ...prev, priority: e.target.value as 'low' | 'medium' | 'high' | 'critical' }))}
-                    className="w-full px-4 py-4 border-2 border-gray-200 rounded-2xl focus:ring-4 focus:ring-green-100 focus:border-green-500 transition-all text-lg"
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                    <option value="critical">Critical Priority</option>
-                  </select>
                 </div>
 
                 <div>
@@ -423,7 +592,6 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                           type="file"
                           accept="image/*"
                           capture="environment"
-                          multiple
                           onChange={handleImageCapture}
                           className="hidden"
                         />
@@ -443,6 +611,48 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   </div>
                 </div>
 
+                {/* AI Analysis Display */}
+                {analyzingWithAI && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                    <div className="flex items-center">
+                      <div className="w-6 h-6 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mr-3"></div>
+                      <div>
+                        <p className="font-semibold text-purple-800">AI Analysis in Progress</p>
+                        <p className="text-sm text-purple-600">Analyzing waste type, priority, and eco-points...</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {aiAnalysis && (
+                  <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6">
+                    <div className="flex items-center mb-4">
+                      <Sparkles size={24} className="text-purple-600 mr-2" />
+                      <h3 className="font-bold text-purple-800">AI Analysis Complete</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <p className="text-sm text-purple-600 font-medium">Priority Level</p>
+                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${getPriorityColor(aiAnalysis.priority_level)}`}>
+                          {aiAnalysis.priority_level.toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-purple-600 font-medium">Eco Points</p>
+                        <div className="flex items-center">
+                          <Award size={16} className="text-yellow-500 mr-1" />
+                          <span className="font-bold text-purple-800">{aiAnalysis.eco_points}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p><span className="font-medium text-purple-700">Waste Type:</span> {aiAnalysis.analysis.waste_type}</p>
+                      <p><span className="font-medium text-purple-700">Severity:</span> {aiAnalysis.analysis.severity}</p>
+                      <p><span className="font-medium text-purple-700">Reasoning:</span> {aiAnalysis.analysis.reasoning}</p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex items-center justify-center text-sm text-gray-600 bg-blue-50 p-4 rounded-2xl border border-blue-200">
                   <MapPin size={20} className="mr-2 text-blue-600" />
                   <span className="font-medium">Location will be captured automatically</span>
@@ -450,13 +660,18 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
                 <button
                   onClick={handleSubmitComplaint}
-                  disabled={images.length === 0 || submittingReport}
-                  className={`w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${(images.length === 0 || submittingReport) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={images.length === 0 || submittingReport || analyzingWithAI}
+                  className={`w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${(images.length === 0 || submittingReport || analyzingWithAI) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   {submittingReport ? (
                     <div className="flex items-center justify-center">
                       <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
                       Submitting Report...
+                    </div>
+                  ) : analyzingWithAI ? (
+                    <div className="flex items-center justify-center">
+                      <Sparkles size={20} className="mr-2" />
+                      AI Analyzing...
                     </div>
                   ) : (
                     'Submit Report'
@@ -535,7 +750,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Eco Points</p>
-                    <p className="text-3xl font-bold text-gray-900">{user.points || 0}</p>
+                    <p className="text-3xl font-bold text-gray-900">{user.eco_points || 0}</p>
                   </div>
                   <div className="w-14 h-14 bg-yellow-100 rounded-2xl flex items-center justify-center">
                     <Award className="text-yellow-600" size={28} />
@@ -597,10 +812,13 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                             {getStatusIcon(complaint.status)}
                             <span className="ml-1 capitalize">{complaint.status}</span>
                           </span>
-                          {complaint.pointsAwarded && (
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(complaint.priority)}`}>
+                            <span className="capitalize">{complaint.priority}</span>
+                          </span>
+                          {complaint.ecoPoints && (
                             <div className="flex items-center text-green-600">
                               <Award size={14} className="mr-1" />
-                              <span className="text-xs font-semibold">+{complaint.pointsAwarded} points</span>
+                              <span className="text-xs font-semibold">{complaint.ecoPoints} points</span>
                             </div>
                           )}
                         </div>
@@ -700,13 +918,27 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                             </span>
                           </div>
                           
-                          {complaint.pointsAwarded && (
+                          {complaint.ecoPoints && (
                             <div className="flex items-center bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-200">
                               <Award size={18} className="mr-2" />
-                              <span className="font-bold">+{complaint.pointsAwarded} points earned!</span>
+                              <span className="font-bold">{complaint.ecoPoints} eco-points</span>
                             </div>
                           )}
                         </div>
+
+                        {/* AI Analysis Display */}
+                        {complaint.aiAnalysis && (
+                          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                            <div className="flex items-center mb-2">
+                              <Sparkles size={16} className="text-purple-600 mr-2" />
+                              <span className="font-semibold text-purple-800 text-sm">AI Analysis</span>
+                            </div>
+                            <div className="text-sm text-purple-700">
+                              <p><span className="font-medium">Type:</span> {complaint.aiAnalysis.waste_type}</p>
+                              <p><span className="font-medium">Impact:</span> {complaint.aiAnalysis.environmental_impact}</p>
+                            </div>
+                          </div>
+                        )}
                         
                         {complaint.assignedWorkerName && (
                           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
@@ -736,7 +968,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               <div className="flex items-center bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-2xl shadow-lg">
                 <Award size={24} className="mr-3" />
                 <div>
-                  <span className="font-bold text-lg">{user.points || 0}</span>
+                  <span className="font-bold text-lg">{user.eco_points || 0}</span>
                   <span className="text-green-100 ml-2">Points Available</span>
                 </div>
               </div>
@@ -763,19 +995,19 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                     <div className="flex justify-between items-center mb-6">
                       <div className="flex items-center text-green-600 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
                         <Award size={20} className="mr-2" />
-                        <span className="font-bold text-lg">{product.points} Points</span>
+                        <span className="font-bold text-lg">{product.point_cost} Points</span>
                       </div>
                       <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                        {product.stock} in stock
+                        {product.quantity} in stock
                       </span>
                     </div>
                     
                     <button
-                      disabled={(user.points || 0) < product.points || product.stock === 0}
+                      disabled={(user.eco_points || 0) < product.point_cost || product.quantity === 0}
                       className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transform hover:scale-105 shadow-lg hover:shadow-xl"
                     >
-                      {(user.points || 0) < product.points ? 'Insufficient Points' : 
-                      product.stock === 0 ? 'Out of Stock' : 'Redeem Now'}
+                      {(user.eco_points || 0) < product.point_cost ? 'Insufficient Points' : 
+                      product.quantity === 0 ? 'Out of Stock' : 'Redeem Now'}
                     </button>
                   </div>
                 ))}
@@ -785,11 +1017,14 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
         )}
       </div>
 
-      {/* Click outside to close dropdown */}
-      {showUserDropdown && (
+      {/* Click outside to close dropdowns */}
+      {(showUserDropdown || showNotifications) && (
         <div 
           className="fixed inset-0 z-40" 
-          onClick={() => setShowUserDropdown(false)}
+          onClick={() => {
+            setShowUserDropdown(false);
+            setShowNotifications(false);
+          }}
         />
       )}
     </div>
