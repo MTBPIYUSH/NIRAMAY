@@ -96,7 +96,7 @@ export const seedSubWorkerAccounts = async () => {
         continue;
       }
 
-      console.log(`✅ Successfully created account for ${worker.name}`);
+      console.log(`Successfully created account for ${worker.name}`);
 
     } catch (error) {
       console.error(`Unexpected error creating account for ${worker.name}:`, error);
