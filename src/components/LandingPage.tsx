@@ -21,6 +21,7 @@ import {
   Phone,
   ChevronDown
 } from 'lucide-react';
+import { ScrollVelocityDemo } from './ui/testimonials';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -68,26 +69,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
     ]
   };
 
-  const testimonials = [
-    {
-      name: 'Ramesh Kumar',
-      location: 'Pune, Maharashtra',
-      text: 'I reported garbage from my lane — it was cleaned within 24 hours. Amazing platform for civic participation!',
-      rating: 5
-    },
-    {
-      name: 'Priya Sharma',
-      location: 'Gurgaon, Haryana',
-      text: 'As a municipal admin, Niramay has transformed how we manage waste complaints. Highly efficient!',
-      rating: 5
-    },
-    {
-      name: 'Suresh Verma',
-      location: 'Bangalore, Karnataka',
-      text: 'Working as a field worker is now so organized. I get clear tasks and citizens appreciate the quick response.',
-      rating: 5
-    }
-  ];
+  // Testimonials array removed
 
   return (
     <div className="min-h-screen bg-white">
@@ -453,38 +435,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* Image Scroll Gallery */}
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
-              Community <span className="text-green-600">Impact</span>
+              Our <span className="text-green-600">Impact</span> in Pictures
             </h3>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Real stories from citizens, admins, and workers who are transforming their communities
+              See how we're transforming communities through waste management initiatives
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {testimonials.map((testimonial, index) => (
-              <div key={index} className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
-                <div className="flex items-center mb-4">
-                  {[...Array(testimonial.rating)].map((_, i) => (
-                    <Star key={i} size={16} className="text-yellow-500 fill-current" />
-                  ))}
-                </div>
-                <p className="text-gray-600 mb-6 italic leading-relaxed">"{testimonial.text}"</p>
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center mr-4">
-                    <span className="text-white font-bold">{testimonial.name.charAt(0)}</span>
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-800">{testimonial.name}</div>
-                    <div className="text-sm text-gray-600">{testimonial.location}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
+          {/* Image Scroll Gallery */}
+          <div>
+            <ScrollVelocityDemo />
           </div>
         </div>
       </section>
