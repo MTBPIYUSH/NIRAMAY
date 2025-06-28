@@ -22,13 +22,16 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { ScrollVelocityDemo } from './ui/testimonials';
+import { FeatureStepsDemo } from './ui/feature-steps-demo';
+import { RolesByCpu } from './ui/roles-by-cpu';
+import { BorderBeam } from './ui/border-beam';
+import { BorderBeamDemo } from './ui/border-beam-demo';
 
 interface LandingPageProps {
   onGetStarted: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
-  const [activeRole, setActiveRole] = useState<'citizen' | 'admin' | 'worker'>('citizen');
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -48,26 +51,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
     { number: '100%', label: 'Transparency in waste management' }
   ];
 
-  const features = {
-    citizen: [
-      { icon: Camera, title: 'Live Garbage Reporting', desc: 'Capture and report waste instantly with location tracking' },
-      { icon: TrendingUp, title: 'Track Progress', desc: 'Monitor your complaint status in real-time' },
-      { icon: Award, title: 'Earn Eco Points', desc: 'Get rewarded for contributing to cleaner cities' },
-      { icon: Recycle, title: 'Eco Store', desc: 'Redeem points for sustainable products' }
-    ],
-    admin: [
-      { icon: Shield, title: 'Multi-Admin System', desc: 'Manage complaints across different wards and cities' },
-      { icon: Users, title: 'Worker Management', desc: 'Assign tasks and monitor field worker performance' },
-      { icon: TrendingUp, title: 'Analytics Dashboard', desc: 'Track resolution rates and cleanliness metrics' },
-      { icon: MapPin, title: 'Real-time Tracking', desc: 'Monitor live status of all cleanup operations' }
-    ],
-    worker: [
-      { icon: HardHat, title: 'Task Notifications', desc: 'Receive cleanup assignments with precise locations' },
-      { icon: CheckCircle, title: 'Status Updates', desc: 'Update availability and task completion status' },
-      { icon: Star, title: 'Performance Tracking', desc: 'Build reputation through quality work' },
-      { icon: Zap, title: 'Instant Rewards', desc: 'Trigger point distribution upon task completion' }
-    ]
-  };
+  // Features are now defined in the RolesByCpu component
 
   // Testimonials array removed
 
@@ -120,14 +104,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-6 justify-center items-center mb-16">
-            <button
-              onClick={onGetStarted}
-              className="group flex items-center px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
-            >
-              <Camera size={24} className="mr-3" />
-              Report Waste Now
-              <ArrowRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
-            </button>
+            <div className="relative">
+              <button
+                onClick={onGetStarted}
+                className="group flex items-center px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
+              >
+                <Camera size={24} className="mr-3" />
+                Report Waste Now
+                <ArrowRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
+              </button>
+              <BorderBeam size={250} duration={8} colorFrom="#22c55e" colorTo="#10b981" />
+            </div>
             
             <button
               onClick={() => scrollToSection('how-it-works')}
@@ -158,76 +145,48 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
       {/* About Niramay */}
       <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            <div>
-              <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
-                About <span className="text-green-600">Niramay</span>
-              </h3>
-              <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-                Niramay is an AI-powered civic platform that lets Indian citizens report garbage in real-time and enables local authorities to resolve issues efficiently — building cleaner, greener cities across India.
-              </p>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mr-4">
-                    <Zap className="text-green-600" size={24} />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-800">AI-Powered</div>
-                    <div className="text-sm text-gray-600">Smart waste detection</div>
-                  </div>
+          <div>
+            <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6 text-center">
+              About <span className="text-green-600">Niramay</span>
+            </h3>
+            <p className="text-xl text-gray-600 mb-8 leading-relaxed text-center max-w-3xl mx-auto">
+              Niramay is an AI-powered civic platform that lets Indian citizens report garbage in real-time and enables local authorities to resolve issues efficiently — building cleaner, greener cities across India.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+              <div className="flex flex-col items-center text-center p-6 bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="w-16 h-16 bg-green-100 rounded-xl flex items-center justify-center mb-4">
+                  <Zap className="text-green-600" size={32} />
                 </div>
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center mr-4">
-                    <Heart className="text-orange-600" size={24} />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-800">Community-Driven</div>
-                    <div className="text-sm text-gray-600">Citizen participation</div>
-                  </div>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                    <Globe className="text-blue-600" size={24} />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-800">Pan-India</div>
-                    <div className="text-sm text-gray-600">Scalable solution</div>
-                  </div>
-                </div>
-                <div className="flex items-center">
-                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mr-4">
-                    <Award className="text-purple-600" size={24} />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-gray-800">Rewarding</div>
-                    <div className="text-sm text-gray-600">Eco-points system</div>
-                  </div>
+                <div>
+                  <div className="font-semibold text-gray-800 text-lg mb-1">AI-Powered</div>
+                  <div className="text-sm text-gray-600">Smart waste detection</div>
                 </div>
               </div>
-            </div>
-            
-            <div className="relative">
-              <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-3xl p-8 text-white shadow-2xl">
-                <div className="text-center mb-8">
-                  <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <Leaf size={40} className="text-white" />
-                  </div>
-                  <h4 className="text-2xl font-bold mb-2">Swachh Bharat Mission</h4>
-                  <p className="text-green-100">Supporting India's cleanliness vision</p>
+              <div className="flex flex-col items-center text-center p-6 bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="w-16 h-16 bg-orange-100 rounded-xl flex items-center justify-center mb-4">
+                  <Heart className="text-orange-600" size={32} />
                 </div>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <div className="text-2xl font-bold">🇮🇳</div>
-                    <div className="text-sm text-green-100">Made in India</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">🌱</div>
-                    <div className="text-sm text-green-100">Eco-Friendly</div>
-                  </div>
-                  <div>
-                    <div className="text-2xl font-bold">🤝</div>
-                    <div className="text-sm text-green-100">Community First</div>
-                  </div>
+                <div>
+                  <div className="font-semibold text-gray-800 text-lg mb-1">Community-Driven</div>
+                  <div className="text-sm text-gray-600">Citizen participation</div>
+                </div>
+              </div>
+              <div className="flex flex-col items-center text-center p-6 bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="w-16 h-16 bg-blue-100 rounded-xl flex items-center justify-center mb-4">
+                  <Globe className="text-blue-600" size={32} />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-800 text-lg mb-1">Pan-India</div>
+                  <div className="text-sm text-gray-600">Scalable solution</div>
+                </div>
+              </div>
+              <div className="flex flex-col items-center text-center p-6 bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="w-16 h-16 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
+                  <Award className="text-purple-600" size={32} />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-800 text-lg mb-1">Rewarding</div>
+                  <div className="text-sm text-gray-600">Eco-points system</div>
                 </div>
               </div>
             </div>
@@ -235,7 +194,19 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
         </div>
       </section>
 
-      {/* How It Works */}
+      {/* Border Beam Demo Section */}
+      <section className="py-16 bg-gradient-to-br from-blue-50 to-green-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-center">
+            <BorderBeamDemo 
+              videoSrc="/videos/swachh-bharat.mp4" 
+              posterSrc="/images/cleanup1.jpg"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* How It Works - Interactive Journey */}
       <section id="how-it-works" className="py-20 bg-gradient-to-br from-gray-50 to-blue-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
@@ -246,125 +217,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
               Experience the seamless journey from waste reporting to cleanup completion
             </p>
           </div>
-
-          <div className="grid md:grid-cols-4 gap-8">
-            {[
-              {
-                step: '01',
-                icon: Camera,
-                title: 'Citizen Reports',
-                desc: 'Click photo of garbage with automatic location tracking',
-                color: 'from-green-400 to-emerald-600'
-              },
-              {
-                step: '02',
-                icon: Shield,
-                title: 'Admin Receives',
-                desc: 'Municipal admin gets real-time notification with details',
-                color: 'from-blue-400 to-indigo-600'
-              },
-              {
-                step: '03',
-                icon: HardHat,
-                title: 'Worker Cleans',
-                desc: 'Nearest available worker gets assigned and completes task',
-                color: 'from-orange-400 to-red-600'
-              },
-              {
-                step: '04',
-                icon: Award,
-                title: 'Rewards Earned',
-                desc: 'Citizen receives eco-points to redeem sustainable products',
-                color: 'from-purple-400 to-pink-600'
-              }
-            ].map((step, index) => {
-              const Icon = step.icon;
-              return (
-                <div key={index} className="relative">
-                  <div className="bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2">
-                    <div className="text-center">
-                      <div className="text-6xl font-bold text-gray-100 mb-4">{step.step}</div>
-                      <div className={`w-16 h-16 bg-gradient-to-br ${step.color} rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg`}>
-                        <Icon className="text-white" size={32} />
-                      </div>
-                      <h4 className="text-xl font-bold text-gray-800 mb-4">{step.title}</h4>
-                      <p className="text-gray-600 leading-relaxed">{step.desc}</p>
-                    </div>
-                  </div>
-                  
-                  {index < 3 && (
-                    <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2">
-                      <ArrowRight className="text-gray-300" size={32} />
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+          
+          {/* Import the FeatureStepsDemo component */}
+          <div className="mt-8">
+            <FeatureStepsDemo />
           </div>
         </div>
       </section>
 
-      {/* Features by Role */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h3 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
-              Features by <span className="text-green-600">Role</span>
-            </h3>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Tailored experiences for every stakeholder in the waste management ecosystem
-            </p>
-          </div>
-
-          {/* Role Tabs */}
-          <div className="flex justify-center mb-12">
-            <div className="flex space-x-1 bg-gray-100 p-1 rounded-2xl">
-              {[
-                { id: 'citizen', label: 'Citizens', icon: Users, color: 'text-green-600' },
-                { id: 'admin', label: 'Admins', icon: Shield, color: 'text-blue-600' },
-                { id: 'worker', label: 'Workers', icon: HardHat, color: 'text-orange-600' }
-              ].map(role => {
-                const Icon = role.icon;
-                return (
-                  <button
-                    key={role.id}
-                    onClick={() => setActiveRole(role.id as 'citizen' | 'admin' | 'worker')}
-                    className={`flex items-center px-6 py-3 rounded-xl font-semibold transition-all ${
-                      activeRole === role.id
-                        ? 'bg-white shadow-lg ' + role.color
-                        : 'text-gray-600 hover:text-gray-800'
-                    }`}
-                  >
-                    <Icon size={20} className="mr-2" />
-                    {role.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Feature Cards */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {features[activeRole].map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <div key={index} className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-4 ${
-                    activeRole === 'citizen' ? 'bg-green-100' :
-                    activeRole === 'admin' ? 'bg-blue-100' : 'bg-orange-100'
-                  }`}>
-                    <Icon className={
-                      activeRole === 'citizen' ? 'text-green-600' :
-                      activeRole === 'admin' ? 'text-blue-600' : 'text-orange-600'
-                    } size={24} />
-                  </div>
-                  <h4 className="text-lg font-bold text-gray-800 mb-3">{feature.title}</h4>
-                  <p className="text-gray-600 text-sm leading-relaxed">{feature.desc}</p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Features by Role - Using CPU Architecture */}
+      <section className="bg-white">
+        <RolesByCpu 
+          title="Features by Role" 
+          subtitle="Tailored experiences for every stakeholder in the waste management ecosystem" 
+          initialRole="citizen" 
+        />
       </section>
 
       {/* Why Niramay */}
@@ -455,22 +322,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-green-500 to-emerald-600">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="py-20 bg-gradient-to-r from-green-500 to-emerald-600 relative overflow-hidden">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <h3 className="text-4xl md:text-5xl font-bold text-white mb-6">
             Ready to Transform Your City?
           </h3>
           <p className="text-xl text-green-100 mb-12 max-w-2xl mx-auto">
             Join thousands of citizens, municipal workers, and administrators who are building cleaner, smarter cities with Niramay.
           </p>
-          <button
-            onClick={onGetStarted}
-            className="group flex items-center mx-auto px-8 py-4 bg-white text-green-600 text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
-          >
-            <Camera size={24} className="mr-3" />
-            Start Your Journey
-            <ArrowRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
-          </button>
+          <div className="relative inline-block">
+            <button
+              onClick={onGetStarted}
+              className="group flex items-center mx-auto px-8 py-4 bg-white text-green-600 text-lg font-semibold rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300"
+            >
+              <Camera size={24} className="mr-3" />
+              Start Your Journey
+              <ArrowRight size={20} className="ml-2 group-hover:translate-x-1 transition-transform" />
+            </button>
+            <BorderBeam size={300} duration={10} colorFrom="#ffffff" colorTo="#22c55e" />
+          </div>
         </div>
       </section>
 

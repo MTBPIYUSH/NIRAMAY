@@ -25,6 +25,30 @@ const images = [
   {
     title: "Student Cleanup Initiative",
     thumbnail: "/images/cleanup5.jpg"
+  },
+  {
+    title: "Student Cleanup Initiative",
+    thumbnail: "/images/cleanup6.jpg"
+  },
+  {
+    title: "Student Cleanup Initiative",
+    thumbnail: "/images/cleanup7.jpg"
+  },
+  {
+    title: "Student Cleanup Initiative",
+    thumbnail: "/images/cleanup8.jpg"
+  },
+  {
+    title: "Student Cleanup Initiative",
+    thumbnail: "/images/cleanup9.jpg"
+  },
+  {
+    title: "Student Cleanup Initiative",
+    thumbnail: "/images/cleanup10.jpg"
+  },
+  {
+    title: "Student Cleanup Initiative",
+    thumbnail: "/images/cleanup11.jpg"
   }
 ]
 
@@ -51,7 +75,7 @@ function ScrollVelocityDemo() {
             ))}
           </ScrollVelocity>
         ))}
-        <ScrollVelocity velocity={4} className="text-green-600 font-bold">Join us in making India cleaner and healthier! Swachh Bharat, Swasth Bharat!</ScrollVelocity>
+        <ScrollVelocity velocity={2} className="text-green-600 font-bold">Join us in making India cleaner and healthier! Swachh Bharat, Swasth Bharat!</ScrollVelocity>
       </div>
     </div>
   )
