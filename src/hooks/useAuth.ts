@@ -14,10 +14,10 @@ export const useAuth = () => {
     // Get initial session with timeout and error handling
     const getInitialSession = async () => {
       try {
-        // Set a timeout for the session check
+        // Set a timeout for the session check - increased to 20 seconds
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+          setTimeout(() => reject(new Error('Session check timeout')), 20000)
         );
 
         const { data: { session }, error } = await Promise.race([
@@ -37,7 +37,7 @@ export const useAuth = () => {
         if (session?.user) {
           console.log('Found existing session for user:', session.user.id);
           setUser(session.user);
-          await fetchProfile(session.user.id);
+          await fetchProfile(session.user.id, session.user);
         } else {
           console.log('No existing session found');
           setUser(null);
@@ -101,7 +101,7 @@ export const useAuth = () => {
             setProfile(null);
           } else if (session?.user) {
             setUser(session.user);
-            await fetchProfile(session.user.id);
+            await fetchProfile(session.user.id, session.user);
           }
         } catch (error) {
           console.error('Error handling auth state change:', error);
@@ -121,11 +121,11 @@ export const useAuth = () => {
     };
   }, []);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string, user?: User) => {
     try {
       console.log('Fetching profile for user:', userId);
       
-      // Add timeout to profile fetch - increased from 8000ms to 15000ms
+      // Add timeout to profile fetch - increased to 20 seconds
       const profilePromise = supabase
         .from('profiles')
         .select('*')
@@ -133,7 +133,7 @@ export const useAuth = () => {
         .single();
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 15000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 20000)
       );
 
       const { data, error } = await Promise.race([
@@ -147,7 +147,9 @@ export const useAuth = () => {
         // If profile doesn't exist, try to create one
         if (error.code === 'PGRST116') { // No rows returned
           console.log('Profile not found, attempting to create one...');
-          await createProfileForUser(userId);
+          if (user) {
+            await createProfileForUser(userId, user);
+          }
           return;
         }
         
@@ -163,17 +165,16 @@ export const useAuth = () => {
     }
   };
 
-  const createProfileForUser = async (userId: string) => {
+  const createProfileForUser = async (userId: string, user: User) => {
     try {
       console.log('Creating profile for existing user:', userId);
       
-      // Get user metadata from auth
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        console.error('Error getting user data:', userError);
+      if (!user) {
+        console.error('User object not provided for profile creation');
         return;
       }
+
+      const now = new Date().toISOString();
 
       const { error: profileError } = await supabase
         .from('profiles')
@@ -184,7 +185,11 @@ export const useAuth = () => {
             name: user.user_metadata?.name || 'User',
             aadhar: user.user_metadata?.aadhar,
             phone: user.user_metadata?.phone,
-            points: 0
+            points: 0,
+            eco_points: 0,
+            status: 'available',
+            created_at: now,
+            updated_at: now
           }
         ]);
 
@@ -195,7 +200,7 @@ export const useAuth = () => {
 
       console.log('Profile created for existing user');
       // Fetch the profile again
-      await fetchProfile(userId);
+      await fetchProfile(userId, user);
     } catch (error) {
       console.error('Error in createProfileForUser:', error);
     }

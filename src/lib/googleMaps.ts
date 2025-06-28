@@ -20,30 +20,59 @@ export interface MapLocation {
   address?: string;
 }
 
+// Global promise to track Google Maps API loading state
+let __googleMapsApiPromise: Promise<void> | null = null;
+
 // Initialize Google Maps
 export const initializeGoogleMaps = (apiKey: string): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    if (window.google && window.google.maps) {
-      resolve();
+  // Return existing promise if already loading or loaded
+  if (__googleMapsApiPromise) {
+    return __googleMapsApiPromise;
+  }
+
+  // Check if Google Maps is already loaded
+  if (window.google && window.google.maps) {
+    __googleMapsApiPromise = Promise.resolve();
+    return __googleMapsApiPromise;
+  }
+
+  __googleMapsApiPromise = new Promise((resolve, reject) => {
+    // Check if script is already being loaded
+    const existingScript = document.querySelector(`script[src*="maps.googleapis.com"]`);
+    if (existingScript) {
+      // Wait for existing script to load
+      const checkLoaded = () => {
+        if (window.google && window.google.maps) {
+          resolve();
+        } else {
+          setTimeout(checkLoaded, 100);
+        }
+      };
+      checkLoaded();
       return;
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=__initGoogleMaps`;
     script.async = true;
     script.defer = true;
 
-    // Global callback function
-    (window as any).initMap = () => {
-      resolve();
-    };
+    // Global callback function - ensure it's only defined once
+    if (!(window as any).__initGoogleMaps) {
+      (window as any).__initGoogleMaps = () => {
+        resolve();
+      };
+    }
 
     script.onerror = () => {
+      __googleMapsApiPromise = null; // Reset on error so it can be retried
       reject(new Error('Failed to load Google Maps API'));
     };
 
     document.head.appendChild(script);
   });
+
+  return __googleMapsApiPromise;
 };
 
 // Initialize Places Autocomplete
