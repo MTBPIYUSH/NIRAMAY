@@ -18,7 +18,7 @@ export const useAuth = () => {
         // Get initial session with timeout
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+          setTimeout(() => reject(new Error('Session check timeout')), 30000)
         );
 
         const { data: { session }, error } = await Promise.race([
@@ -110,7 +110,7 @@ export const useAuth = () => {
         .maybeSingle();
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 30000)
       );
 
       const { data, error } = await Promise.race([
