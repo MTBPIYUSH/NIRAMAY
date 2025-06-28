@@ -14,10 +14,9 @@ import {
   Trophy,
   Calendar,
   Target,
-  Zap
+  Zap,
+  Upload
 } from 'lucide-react';
-import { CameraCapture } from './CameraCapture';
-import { mockComplaints } from '../data/mockData';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
 
@@ -36,14 +35,26 @@ interface EcoProduct {
   stock: number;
 }
 
+interface DatabaseReport {
+  id: string;
+  user_id: string;
+  images: string[];
+  lat: number;
+  lng: number;
+  address: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogout }) => {
   // Default to 'report' tab for citizens as per requirements
   const [activeTab, setActiveTab] = useState<'dashboard' | 'report' | 'complaints' | 'store'>('report');
-  const [showCamera, setShowCamera] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
-  const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [ecoProducts, setEcoProducts] = useState<EcoProduct[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [loadingReports, setLoadingReports] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
   const [newComplaint, setNewComplaint] = useState<Partial<Complaint>>({
     title: '',
@@ -55,11 +66,53 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
   const userComplaints = complaints.filter(c => c.userId === user.id);
 
-  // Fetch eco-products from database
+  // Fetch user's reports from database
   useEffect(() => {
+    fetchUserReports();
     fetchEcoProducts();
-  }, []);
+  }, [user.id]);
 
+  const fetchUserReports = async () => {
+    setLoadingReports(true);
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching reports:', error);
+        return;
+      }
+
+      // Convert database reports to complaint format
+      const convertedComplaints: Complaint[] = (data || []).map((report: DatabaseReport) => ({
+        id: report.id,
+        userId: report.user_id,
+        userName: user.name,
+        title: 'Waste Report', // Default title since we don't store it in DB yet
+        description: 'Reported waste issue', // Default description
+        imageUrl: report.images[0] || '',
+        location: {
+          lat: report.lat,
+          lng: report.lng,
+          address: report.address
+        },
+        status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
+        priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
+        submittedAt: new Date(report.created_at)
+      }));
+
+      setComplaints(convertedComplaints);
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    } finally {
+      setLoadingReports(false);
+    }
+  };
+
+  // Fetch eco-products from database
   const fetchEcoProducts = async () => {
     setLoadingProducts(true);
     try {
@@ -111,10 +164,26 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     }
   };
 
-  const handleImageCapture = (imageDataUrl: string) => {
-    if (images.length < 4) {
-      setImages(prev => [...prev, imageDataUrl]);
-    }
+  // Handle file input for camera
+  const handleImageCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (images.length >= 4) return;
+      
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result && images.length < 4) {
+          setImages(prev => [...prev, result]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset the input
+    event.target.value = '';
   };
 
   const removeImage = (index: number) => {
@@ -188,15 +257,6 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       setSubmittingReport(false);
     }
   };
-
-  if (showCamera) {
-    return (
-      <CameraCapture
-        onCapture={handleImageCapture}
-        onClose={() => setShowCamera(false)}
-      />
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-orange-50 to-blue-50">
@@ -340,25 +400,39 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-3">Photo Evidence *</label>
-                  <div className="flex gap-4 mb-4">
+                  <div className="flex gap-4 mb-4 flex-wrap">
                     {images.map((img, idx) => (
                       <div key={idx} className="relative">
-                        <img src={img} alt={`Captured ${idx + 1}`} className="w-24 h-24 object-cover rounded-lg" />
+                        <img 
+                          src={img} 
+                          alt={`Captured ${idx + 1}`} 
+                          className="w-24 h-24 object-cover rounded-lg border-2 border-gray-200 shadow-md" 
+                        />
                         <button
                           onClick={() => removeImage(idx)}
-                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 transition-colors shadow-lg"
                           title="Remove"
-                        >✕</button>
+                        >
+                          ✕
+                        </button>
                       </div>
                     ))}
                     {images.length < 4 && (
-                      <button
-                        onClick={() => setShowCamera(true)}
-                        className="w-24 h-24 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-3xl text-gray-400 hover:border-green-500"
-                        title="Add Image"
-                      >+</button>
+                      <label className="w-24 h-24 flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-green-500 hover:text-green-500 transition-colors bg-gray-50 hover:bg-green-50 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          multiple
+                          onChange={handleImageCapture}
+                          className="hidden"
+                        />
+                        <Camera size={20} className="mb-1" />
+                        <span className="text-xs">Add Photo</span>
+                      </label>
                     )}
                   </div>
+                  <p className="text-sm text-gray-500">Capture up to 4 high-quality images of the waste issue</p>
                 </div>
 
                 <div className="flex items-center justify-center text-sm text-gray-600 bg-blue-50 p-4 rounded-2xl border border-blue-200">
@@ -481,7 +555,12 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                 Recent Activity
               </h3>
               
-              {userComplaints.length === 0 ? (
+              {loadingReports ? (
+                <div className="flex justify-center items-center py-12">
+                  <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="ml-3 text-gray-600">Loading reports...</span>
+                </div>
+              ) : userComplaints.length === 0 ? (
                 <div className="text-center py-12">
                   <Camera size={48} className="text-gray-400 mx-auto mb-4" />
                   <h4 className="text-lg font-semibold text-gray-600 mb-2">No reports yet</h4>
@@ -544,7 +623,12 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               </div>
             </div>
             
-            {userComplaints.length === 0 ? (
+            {loadingReports ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="ml-3 text-gray-600">Loading reports...</span>
+              </div>
+            ) : userComplaints.length === 0 ? (
               <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
                 <Clock size={64} className="text-gray-400 mx-auto mb-6" />
                 <h3 className="text-2xl font-bold text-gray-600 mb-4">No reports yet</h3>
