@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Camera, 
   MapPin, 
@@ -17,13 +17,23 @@ import {
   Zap
 } from 'lucide-react';
 import { CameraCapture } from './CameraCapture';
-import { mockComplaints, mockEcoProducts } from '../data/mockData';
-import { Profile } from '../lib/supabase';
+import { mockComplaints } from '../data/mockData';
+import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
 
 interface CitizenDashboardProps {
   user: Profile;
   onLogout: () => void;
+}
+
+interface EcoProduct {
+  id: string;
+  name: string;
+  description: string;
+  points: number;
+  image_url: string;
+  category: string;
+  stock: number;
 }
 
 export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogout }) => {
@@ -32,6 +42,9 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   const [showCamera, setShowCamera] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [complaints, setComplaints] = useState<Complaint[]>(mockComplaints);
+  const [ecoProducts, setEcoProducts] = useState<EcoProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [submittingReport, setSubmittingReport] = useState(false);
   const [newComplaint, setNewComplaint] = useState<Partial<Complaint>>({
     title: '',
     description: '',
@@ -41,6 +54,32 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   const [images, setImages] = useState<string[]>([]);
 
   const userComplaints = complaints.filter(c => c.userId === user.id);
+
+  // Fetch eco-products from database
+  useEffect(() => {
+    fetchEcoProducts();
+  }, []);
+
+  const fetchEcoProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const { data, error } = await supabase
+        .from('eco_products')
+        .select('*')
+        .order('points', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching eco-products:', error);
+        return;
+      }
+
+      setEcoProducts(data || []);
+    } catch (error) {
+      console.error('Error fetching eco-products:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -82,34 +121,72 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     setImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmitComplaint = () => {
+  const handleSubmitComplaint = async () => {
     if (!newComplaint.title || images.length === 0) {
       alert('Please fill the title and capture at least one image');
       return;
     }
 
-    const newComplaintData: Complaint = {
-      id: Date.now().toString(),
-      userId: user.id,
-      userName: user.name,
-      title: newComplaint.title || '',
-      description: newComplaint.description || '',
-      imageUrl: images[0],
-      location: {
+    setSubmittingReport(true);
+
+    try {
+      // Get current location (mock for now - in real app, use geolocation API)
+      const mockLocation = {
         lat: 28.4595 + Math.random() * 0.01,
         lng: 77.0266 + Math.random() * 0.01,
-        address: 'Auto-detected location, Gurgaon'
-      },
-      status: 'submitted',
-      priority: (newComplaint.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
-      submittedAt: new Date()
-    };
+        address: `${user.ward || 'Auto-detected location'}, ${user.city || 'Gurgaon'}`
+      };
 
-    setComplaints((prev: Complaint[]) => [newComplaintData, ...prev]);
-    setNewComplaint(() => ({ title: '', description: '', priority: 'medium', imageUrl: '' }));
-    setImages([]);
-    setActiveTab('complaints');
-    alert('Report submitted successfully! Our team will review it shortly.');
+      // Insert report into database
+      const { data, error } = await supabase
+        .from('reports')
+        .insert([
+          {
+            user_id: user.id,
+            images: images, // Store all images as array
+            lat: mockLocation.lat,
+            lng: mockLocation.lng,
+            address: mockLocation.address,
+            status: 'submitted'
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error submitting report:', error);
+        alert('Failed to submit report. Please try again.');
+        return;
+      }
+
+      console.log('Report submitted successfully:', data);
+
+      // Create local complaint object for immediate UI update
+      const newComplaintData: Complaint = {
+        id: data.id,
+        userId: user.id,
+        userName: user.name,
+        title: newComplaint.title || '',
+        description: newComplaint.description || '',
+        imageUrl: images[0],
+        location: mockLocation,
+        status: 'submitted',
+        priority: (newComplaint.priority as 'low' | 'medium' | 'high' | 'critical') || 'medium',
+        submittedAt: new Date(data.created_at)
+      };
+
+      setComplaints((prev: Complaint[]) => [newComplaintData, ...prev]);
+      setNewComplaint(() => ({ title: '', description: '', priority: 'medium', imageUrl: '' }));
+      setImages([]);
+      setActiveTab('complaints');
+      alert('Report submitted successfully! Our team will review it shortly.');
+
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      alert('Failed to submit report. Please try again.');
+    } finally {
+      setSubmittingReport(false);
+    }
   };
 
   if (showCamera) {
@@ -291,10 +368,17 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
                 <button
                   onClick={handleSubmitComplaint}
-                  disabled={images.length === 0}
-                  className={`w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${images.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={images.length === 0 || submittingReport}
+                  className={`w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${(images.length === 0 || submittingReport) ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Submit Report 
+                  {submittingReport ? (
+                    <div className="flex items-center justify-center">
+                      <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                      Submitting Report...
+                    </div>
+                  ) : (
+                    'Submit Report'
+                  )}
                 </button>
               </div>
             </div>
@@ -566,38 +650,45 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {mockEcoProducts.map(product => (
-                <div key={product.id} className="group bg-white rounded-3xl p-8 shadow-lg border border-gray-100 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2">
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className="w-full h-48 object-cover rounded-2xl mb-6 group-hover:scale-105 transition-transform duration-300 shadow-lg"
-                  />
-                  
-                  <h3 className="text-xl font-bold text-gray-800 mb-3">{product.name}</h3>
-                  <p className="text-gray-600 mb-6 leading-relaxed">{product.description}</p>
-                  
-                  <div className="flex justify-between items-center mb-6">
-                    <div className="flex items-center text-green-600 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
-                      <Award size={20} className="mr-2" />
-                      <span className="font-bold text-lg">{product.points} Points</span>
+            {loadingProducts ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="ml-3 text-gray-600">Loading products...</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {ecoProducts.map(product => (
+                  <div key={product.id} className="group bg-white rounded-3xl p-8 shadow-lg border border-gray-100 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2">
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
+                      className="w-full h-48 object-cover rounded-2xl mb-6 group-hover:scale-105 transition-transform duration-300 shadow-lg"
+                    />
+                    
+                    <h3 className="text-xl font-bold text-gray-800 mb-3">{product.name}</h3>
+                    <p className="text-gray-600 mb-6 leading-relaxed">{product.description}</p>
+                    
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center text-green-600 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
+                        <Award size={20} className="mr-2" />
+                        <span className="font-bold text-lg">{product.points} Points</span>
+                      </div>
+                      <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                        {product.stock} in stock
+                      </span>
                     </div>
-                    <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                      {product.stock} in stock
-                    </span>
+                    
+                    <button
+                      disabled={(user.points || 0) < product.points || product.stock === 0}
+                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transform hover:scale-105 shadow-lg hover:shadow-xl"
+                    >
+                      {(user.points || 0) < product.points ? 'Insufficient Points' : 
+                      product.stock === 0 ? 'Out of Stock' : 'Redeem Now'}
+                    </button>
                   </div>
-                  
-                  <button
-                    disabled={(user.points || 0) < product.points || product.stock === 0}
-                    className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transform hover:scale-105 shadow-lg hover:shadow-xl"
-                  >
-                    {(user.points || 0) < product.points ? 'Insufficient Points' : 
-                    product.stock === 0 ? 'Out of Stock' : 'Redeem Now'}
-                  </button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
