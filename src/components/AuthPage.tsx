@@ -12,7 +12,8 @@ import {
   EyeOff,
   ArrowRight,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  UserCheck
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
@@ -24,6 +25,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
   const [selectedRole, setSelectedRole] = useState<'citizen' | 'admin' | 'subworker'>('citizen');
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -57,7 +59,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     },
     {
       id: 'subworker',
-      title: 'Field Worker',
+      title: 'Municipal Worker',
       description: 'Complete cleanup assignments',
       icon: HardHat,
       color: 'from-orange-400 to-red-600',
@@ -69,6 +71,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
   const validateAadhar = (aadhar: string) => {
     return /^\d{12}$/.test(aadhar);
+  };
+
+  const validatePhone = (phone: string) => {
+    return /^\d{10}$/.test(phone);
   };
 
   const validateEmail = (email: string) => {
@@ -86,19 +92,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         throw new Error('Please enter a valid email address');
       }
 
-      if (formData.password.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
+      if (formData.password.length < 8) {
+        throw new Error('Password must be at least 8 characters long');
       }
 
       if (!isLogin) {
-        // Sign up validation
+        // Sign up validation (only for citizens)
         if (selectedRole === 'citizen') {
           if (!formData.name.trim()) {
-            throw new Error('Name is required');
+            throw new Error('Full name is required');
           }
 
           if (!validateAadhar(formData.aadhar)) {
-            throw new Error('Please enter a valid 12-digit Aadhar number');
+            throw new Error('Please enter a valid 12-digit Aadhaar number');
+          }
+
+          if (!validatePhone(formData.phone)) {
+            throw new Error('Please enter a valid 10-digit mobile number');
           }
 
           if (formData.password !== formData.confirmPassword) {
@@ -116,8 +126,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
           setMessage({
             type: 'success',
-            text: 'Account created successfully! Please check your email to verify your account.'
+            text: 'Account created successfully! Welcome to Niramay.'
           });
+
+          setTimeout(() => {
+            onAuthSuccess();
+          }, 1500);
         }
       } else {
         // Sign in
@@ -126,7 +140,14 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         if (error) throw error;
 
         if (data.user) {
-          onAuthSuccess();
+          setMessage({
+            type: 'success',
+            text: 'Login successful! Redirecting to dashboard...'
+          });
+
+          setTimeout(() => {
+            onAuthSuccess();
+          }, 1000);
         }
       }
     } catch (error: any) {
@@ -143,6 +164,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     setMessage(null);
   };
+
+  // Auto-switch to login when non-citizen role is selected
+  React.useEffect(() => {
+    if (selectedRole !== 'citizen') {
+      setIsLogin(true);
+    }
+  }, [selectedRole]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 via-orange-50 to-blue-50 flex items-center justify-center p-4">
@@ -247,7 +275,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </div>
             </div>
 
-            {/* Auth Toggle */}
+            {/* Auth Toggle - Only show for citizens */}
             {currentRole.canSignUp && (
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button
@@ -270,7 +298,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                       : 'text-gray-600 hover:text-gray-800'
                   }`}
                 >
-                  Sign Up
+                  Register
                 </button>
               </div>
             )}
@@ -293,7 +321,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Sign Up Fields */}
+              {/* Registration Fields - Only for citizens */}
               {!isLogin && selectedRole === 'citizen' && (
                 <>
                   <div>
@@ -312,7 +340,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Aadhar Number *
+                      Aadhaar Number *
                     </label>
                     <div className="relative">
                       <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -324,7 +352,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                           handleInputChange('aadhar', value);
                         }}
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        placeholder="Enter 12-digit Aadhar number"
+                        placeholder="Enter 12-digit Aadhaar number"
                         required
                       />
                     </div>
@@ -332,16 +360,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number
+                      Mobile Number *
                     </label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                       <input
                         type="tel"
                         value={formData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          handleInputChange('phone', value);
+                        }}
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        placeholder="+91 98765 43210"
+                        placeholder="Enter 10-digit mobile number"
+                        required
                       />
                     </div>
                   </div>
@@ -351,7 +383,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {selectedRole === 'citizen' ? 'Gmail Address *' : 'Email Address *'}
+                  Email Address *
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -391,7 +423,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 </div>
               </div>
 
-              {/* Confirm Password */}
+              {/* Confirm Password - Only for registration */}
               {!isLogin && selectedRole === 'citizen' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -400,13 +432,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                     <input
-                      type="password"
+                      type={showConfirmPassword ? 'text' : 'password'}
                       value={formData.confirmPassword}
                       onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                      className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
+                      className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
                       placeholder="Confirm your password"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
                   </div>
                 </div>
               )}
@@ -428,15 +467,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </button>
             </form>
 
-            {/* Footer */}
+            {/* Footer Notice for Admin/Worker */}
             {!currentRole.canSignUp && (
               <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-                <div className="flex items-center text-yellow-800">
-                  <AlertCircle size={16} className="mr-2 flex-shrink-0" />
-                  <span className="text-sm">
-                    {selectedRole === 'admin' ? 'Admin' : 'Worker'} accounts are pre-approved. 
-                    Please use your provided credentials to sign in.
-                  </span>
+                <div className="flex items-start text-yellow-800">
+                  <AlertCircle size={16} className="mr-2 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    {selectedRole === 'admin' ? (
+                      <>
+                        <strong>Municipal Admin Portal:</strong> This portal is restricted to authorized municipal authorities. 
+                        Login credentials are pre-assigned by the system administrators. For access-related queries, 
+                        please contact technical support.
+                      </>
+                    ) : (
+                      <>
+                        <strong>Municipal Worker Portal:</strong> This login is exclusively for registered municipal workers. 
+                        Your credentials have been provided by your supervisor. If you haven't received your login details, 
+                        please contact your municipal authority.
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Demo Credentials */}
+            {!currentRole.canSignUp && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                <div className="text-xs text-blue-700">
+                  <strong>Demo Credentials:</strong><br />
+                  Email: {selectedRole === 'admin' ? 'admin@niramay.gov.in' : 'worker@niramay.gov.in'}<br />
+                  Password: password123
                 </div>
               </div>
             )}
