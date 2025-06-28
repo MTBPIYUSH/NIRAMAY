@@ -64,3 +64,12 @@ export interface Analytics {
     resolved: number;
   }[];
 }
+
+export interface LeaderboardEntry {
+  id: string;
+  name: string;
+  points: number;
+  rank: number;
+  city: string;
+  reportsCount: number;
+}

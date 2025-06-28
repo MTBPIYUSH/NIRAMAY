@@ -75,6 +75,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  const validatePhone = (phone: string) => {
+    return /^\d{10}$/.test(phone);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -86,19 +90,23 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         throw new Error('Please enter a valid email address');
       }
 
-      if (formData.password.length < 6) {
-        throw new Error('Password must be at least 6 characters long');
+      if (formData.password.length < 8) {
+        throw new Error('Password must be at least 8 characters long');
       }
 
       if (!isLogin) {
-        // Sign up validation
+        // Sign up validation (only for citizens)
         if (selectedRole === 'citizen') {
           if (!formData.name.trim()) {
-            throw new Error('Name is required');
+            throw new Error('Full name is required');
           }
 
           if (!validateAadhar(formData.aadhar)) {
-            throw new Error('Please enter a valid 12-digit Aadhar number');
+            throw new Error('Please enter a valid 12-digit Aadhaar number');
+          }
+
+          if (!formData.phone || !validatePhone(formData.phone)) {
+            throw new Error('Please enter a valid 10-digit mobile number');
           }
 
           if (formData.password !== formData.confirmPassword) {
@@ -141,6 +149,24 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    setMessage(null);
+  };
+
+  const handleRoleChange = (roleId: 'citizen' | 'admin' | 'subworker') => {
+    setSelectedRole(roleId);
+    // Reset to login for non-citizen roles
+    if (roleId !== 'citizen') {
+      setIsLogin(true);
+    }
+    // Clear form data when switching roles
+    setFormData({
+      email: '',
+      password: '',
+      confirmPassword: '',
+      name: '',
+      aadhar: '',
+      phone: ''
+    });
     setMessage(null);
   };
 
@@ -225,7 +251,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     <button
                       key={role.id}
                       type="button"
-                      onClick={() => setSelectedRole(role.id as any)}
+                      onClick={() => handleRoleChange(role.id as any)}
                       className={`p-3 rounded-xl border-2 transition-all ${
                         selectedRole === role.id
                           ? 'border-green-500 bg-green-50'
@@ -247,7 +273,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               </div>
             </div>
 
-            {/* Auth Toggle */}
+            {/* Auth Toggle - Only for Citizens */}
             {currentRole.canSignUp && (
               <div className="flex bg-gray-100 p-1 rounded-xl mb-6">
                 <button
@@ -277,15 +303,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
             {/* Message */}
             {message && (
-              <div className={`mb-6 p-4 rounded-xl flex items-center ${
+              <div className={`mb-6 p-4 rounded-xl flex items-start ${
                 message.type === 'success' 
                   ? 'bg-green-50 text-green-800 border border-green-200' 
                   : 'bg-red-50 text-red-800 border border-red-200'
               }`}>
                 {message.type === 'success' ? (
-                  <CheckCircle size={16} className="mr-2 flex-shrink-0" />
+                  <CheckCircle size={16} className="mr-2 flex-shrink-0 mt-0.5" />
                 ) : (
-                  <AlertCircle size={16} className="mr-2 flex-shrink-0" />
+                  <AlertCircle size={16} className="mr-2 flex-shrink-0 mt-0.5" />
                 )}
                 <span className="text-sm">{message.text}</span>
               </div>
@@ -293,7 +319,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
             {/* Form */}
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Sign Up Fields */}
+              {/* Sign Up Fields - Only for Citizens */}
               {!isLogin && selectedRole === 'citizen' && (
                 <>
                   <div>
@@ -312,7 +338,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Aadhar Number *
+                      Aadhaar Number *
                     </label>
                     <div className="relative">
                       <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -324,7 +350,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                           handleInputChange('aadhar', value);
                         }}
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        placeholder="Enter 12-digit Aadhar number"
+                        placeholder="Enter 12-digit Aadhaar number"
                         required
                       />
                     </div>
@@ -332,16 +358,20 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number
+                      Mobile Number *
                     </label>
                     <div className="relative">
                       <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                       <input
                         type="tel"
                         value={formData.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          handleInputChange('phone', value);
+                        }}
                         className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                        placeholder="+91 98765 43210"
+                        placeholder="Enter 10-digit mobile number"
+                        required
                       />
                     </div>
                   </div>
@@ -351,7 +381,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
               {/* Email */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  {selectedRole === 'citizen' ? 'Gmail Address *' : 'Email Address *'}
+                  Email Address *
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -360,7 +390,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     className="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder={selectedRole === 'citizen' ? 'your.email@gmail.com' : 'your.email@domain.com'}
+                    placeholder="your.email@domain.com"
                     required
                   />
                 </div>
@@ -378,7 +408,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                     value={formData.password}
                     onChange={(e) => handleInputChange('password', e.target.value)}
                     className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all"
-                    placeholder="Enter your password"
+                    placeholder="Enter your password (minimum 8 characters)"
                     required
                   />
                   <button
@@ -391,7 +421,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
                 </div>
               </div>
 
-              {/* Confirm Password */}
+              {/* Confirm Password - Only for Citizen Sign Up */}
               {!isLogin && selectedRole === 'citizen' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -431,11 +461,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             {/* Footer */}
             {!currentRole.canSignUp && (
               <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-                <div className="flex items-center text-yellow-800">
-                  <AlertCircle size={16} className="mr-2 flex-shrink-0" />
+                <div className="flex items-start text-yellow-800">
+                  <AlertCircle size={16} className="mr-2 flex-shrink-0 mt-0.5" />
                   <span className="text-sm">
-                    {selectedRole === 'admin' ? 'Admin' : 'Worker'} accounts are pre-approved. 
-                    Please use your provided credentials to sign in.
+                    {selectedRole === 'admin' 
+                      ? 'This portal is restricted to authorized municipal authorities. Login credentials are pre-assigned by the system administrators. For access-related queries, please contact technical support.'
+                      : 'This login is exclusively for registered municipal workers. Your credentials have been provided by your supervisor. If you haven\'t received your login details, please contact your municipal authority.'
+                    }
                   </span>
                 </div>
               </div>
