@@ -53,7 +53,7 @@ export const initializeGoogleMaps = (apiKey: string): Promise<void> => {
     }
 
     const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=__initGoogleMaps`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry,directions&callback=__initGoogleMaps`;
     script.async = true;
     script.defer = true;
 
@@ -216,6 +216,54 @@ export const createEmbeddedMap = (
   return map;
 };
 
+// Create map with directions
+export const createMapWithDirections = (
+  container: HTMLElement,
+  origin: MapLocation,
+  destination: MapLocation,
+  options: {
+    zoom?: number;
+    travelMode?: google.maps.TravelMode;
+  } = {}
+): google.maps.Map | null => {
+  if (!window.google || !window.google.maps) {
+    console.error('Google Maps API not loaded');
+    return null;
+  }
+
+  const map = new google.maps.Map(container, {
+    zoom: options.zoom || 15,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false
+  });
+
+  const directionsService = new google.maps.DirectionsService();
+  const directionsRenderer = new google.maps.DirectionsRenderer({
+    suppressMarkers: false,
+    polylineOptions: {
+      strokeColor: '#4F46E5',
+      strokeWeight: 4
+    }
+  });
+
+  directionsRenderer.setMap(map);
+
+  directionsService.route({
+    origin: new google.maps.LatLng(origin.lat, origin.lng),
+    destination: new google.maps.LatLng(destination.lat, destination.lng),
+    travelMode: options.travelMode || google.maps.TravelMode.DRIVING
+  }, (result, status) => {
+    if (status === 'OK' && result) {
+      directionsRenderer.setDirections(result);
+    } else {
+      console.error('Directions request failed:', status);
+    }
+  });
+
+  return map;
+};
+
 // Get current user location
 export const getCurrentLocation = (): Promise<MapLocation> => {
   return new Promise((resolve, reject) => {
@@ -271,6 +319,20 @@ export const calculateDistance = (
   const point2 = new google.maps.LatLng(lat2, lng2);
   
   return google.maps.geometry.spherical.computeDistanceBetween(point1, point2);
+};
+
+// Get directions URL for external navigation
+export const getDirectionsUrl = (
+  origin: MapLocation,
+  destination: MapLocation,
+  travelMode: 'driving' | 'walking' | 'transit' = 'driving'
+): string => {
+  const baseUrl = 'https://www.google.com/maps/dir/';
+  const originStr = `${origin.lat},${origin.lng}`;
+  const destStr = `${destination.lat},${destination.lng}`;
+  const modeParam = travelMode === 'driving' ? '' : `&dirflg=${travelMode.charAt(0)}`;
+  
+  return `${baseUrl}${originStr}/${destStr}${modeParam}`;
 };
 
 // Validate if location is within Indian boundaries (approximate)

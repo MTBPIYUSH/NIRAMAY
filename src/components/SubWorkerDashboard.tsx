@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle, Navigation, Map, Route } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint, SubWorker } from '../types';
+import { 
+  initializeGoogleMaps, 
+  createEmbeddedMap, 
+  getCurrentLocation 
+} from '../lib/googleMaps';
 
 interface SubWorkerDashboardProps {
   user: Profile;
@@ -36,6 +41,11 @@ interface ProofSubmissionModal {
   report: Complaint | null;
 }
 
+interface TaskDetailModal {
+  isOpen: boolean;
+  report: Complaint | null;
+}
+
 export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'tasks' | 'completed'>('dashboard');
   const [complaints, setComplaints] = useState<Complaint[]>([]);
@@ -46,9 +56,17 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
     isOpen: false,
     report: null
   });
+  const [taskDetailModal, setTaskDetailModal] = useState<TaskDetailModal>({
+    isOpen: false,
+    report: null
+  });
   const [proofImage, setProofImage] = useState<string>('');
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null);
   const [rejectionBanner, setRejectionBanner] = useState<string>('');
+  const [mapsLoaded, setMapsLoaded] = useState(false);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const taskMapRef = useRef<HTMLDivElement>(null);
+  const [currentMap, setCurrentMap] = useState<google.maps.Map | null>(null);
 
   // Mock worker data - in real app, fetch from database
   const currentWorker = {
@@ -62,10 +80,44 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
     rating: 4.8
   };
 
+  // Initialize Google Maps
+  useEffect(() => {
+    const initMaps = async () => {
+      try {
+        const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+        if (!apiKey) {
+          console.error('Google Maps API key not found');
+          return;
+        }
+
+        await initializeGoogleMaps(apiKey);
+        setMapsLoaded(true);
+      } catch (error) {
+        console.error('Failed to initialize Google Maps:', error);
+      }
+    };
+
+    initMaps();
+  }, []);
+
   useEffect(() => {
     fetchAssignedTasks();
-    getCurrentLocation();
+    getCurrentLocationData();
   }, [user.id]);
+
+  const getCurrentLocationData = async () => {
+    try {
+      const location = await getCurrentLocation();
+      setCurrentLocation(location);
+    } catch (error) {
+      console.error('Error getting location:', error);
+      // Use mock location for demo
+      setCurrentLocation({
+        lat: 28.4595 + Math.random() * 0.01,
+        lng: 77.0266 + Math.random() * 0.01
+      });
+    }
+  };
 
   const fetchAssignedTasks = async () => {
     setLoadingTasks(true);
@@ -150,33 +202,6 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
     }
   };
 
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setCurrentLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          // Use mock location for demo
-          setCurrentLocation({
-            lat: 28.4595 + Math.random() * 0.01,
-            lng: 77.0266 + Math.random() * 0.01
-          });
-        }
-      );
-    } else {
-      // Use mock location for demo
-      setCurrentLocation({
-        lat: 28.4595 + Math.random() * 0.01,
-        lng: 77.0266 + Math.random() * 0.01
-      });
-    }
-  };
-
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
     const R = 6371e3; // Earth's radius in meters
     const φ1 = lat1 * Math.PI/180;
@@ -190,6 +215,56 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
     return R * c; // Distance in meters
+  };
+
+  const openTaskDetail = async (report: Complaint) => {
+    setTaskDetailModal({ isOpen: true, report });
+    
+    // Initialize map when modal opens
+    if (mapsLoaded && taskMapRef.current) {
+      setTimeout(() => {
+        const map = createEmbeddedMap(taskMapRef.current!, {
+          lat: report.location.lat,
+          lng: report.location.lng,
+          address: report.location.address
+        }, {
+          zoom: 16,
+          marker: true
+        });
+        setCurrentMap(map);
+
+        // Add directions if current location is available
+        if (currentLocation && window.google && window.google.maps) {
+          const directionsService = new google.maps.DirectionsService();
+          const directionsRenderer = new google.maps.DirectionsRenderer({
+            suppressMarkers: false,
+            polylineOptions: {
+              strokeColor: '#4F46E5',
+              strokeWeight: 4
+            }
+          });
+          
+          directionsRenderer.setMap(map);
+
+          directionsService.route({
+            origin: new google.maps.LatLng(currentLocation.lat, currentLocation.lng),
+            destination: new google.maps.LatLng(report.location.lat, report.location.lng),
+            travelMode: google.maps.TravelMode.DRIVING
+          }, (result, status) => {
+            if (status === 'OK' && result) {
+              directionsRenderer.setDirections(result);
+            }
+          });
+        }
+      }, 100);
+    }
+  };
+
+  const getDirectionsUrl = (report: Complaint) => {
+    if (currentLocation) {
+      return `https://www.google.com/maps/dir/${currentLocation.lat},${currentLocation.lng}/${report.location.lat},${report.location.lng}`;
+    }
+    return `https://www.google.com/maps/search/?api=1&query=${report.location.lat},${report.location.lng}`;
   };
 
   const handleProofImageCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -210,7 +285,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
   const openProofModal = (report: Complaint) => {
     setProofModal({ isOpen: true, report });
     setProofImage('');
-    getCurrentLocation();
+    getCurrentLocationData();
   };
 
   const submitProofForApproval = async () => {
@@ -450,16 +525,26 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                     </span>
                   </div>
                   <p className="text-white/90 mb-2">Reporter: {assignedTasks[0].userName}</p>
-                  <div className="flex items-center text-white/80">
+                  <div className="flex items-center text-white/80 mb-4">
                     <MapPin size={16} className="mr-2" />
                     {assignedTasks[0].location.address}
                   </div>
-                  <button
-                    onClick={() => openProofModal(assignedTasks[0])}
-                    className="mt-4 bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors"
-                  >
-                    Submit Completion Proof
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => openTaskDetail(assignedTasks[0])}
+                      className="bg-white text-orange-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition-colors flex items-center"
+                    >
+                      <Map size={16} className="mr-2" />
+                      View on Map
+                    </button>
+                    <button
+                      onClick={() => openProofModal(assignedTasks[0])}
+                      className="bg-white/20 text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/30 transition-colors flex items-center"
+                    >
+                      <Camera size={16} className="mr-2" />
+                      Submit Proof
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -544,7 +629,17 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                         
                         <div className="flex items-center text-sm text-gray-500 bg-blue-50 p-3 rounded-xl">
                           <MapPin size={16} className="mr-2 text-blue-600" />
-                          <span className="font-medium">{task.location.address}</span>
+                          <span className="font-medium flex-1">{task.location.address}</span>
+                          {currentLocation && (
+                            <span className="text-xs text-blue-600 ml-2">
+                              {Math.round(calculateDistance(
+                                currentLocation.lat, 
+                                currentLocation.lng, 
+                                task.location.lat, 
+                                task.location.lng
+                              ))}m away
+                            </span>
+                          )}
                         </div>
                         
                         <div className="flex justify-between items-center">
@@ -552,13 +647,22 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                             Assigned: {task.submittedAt.toLocaleDateString()}
                           </span>
                           
-                          <button
-                            onClick={() => openProofModal(task)}
-                            className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all"
-                          >
-                            <Camera size={16} className="mr-2" />
-                            Submit Proof
-                          </button>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => openTaskDetail(task)}
+                              className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-all"
+                            >
+                              <Navigation size={16} className="mr-2" />
+                              Navigate
+                            </button>
+                            <button
+                              onClick={() => openProofModal(task)}
+                              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all"
+                            >
+                              <Camera size={16} className="mr-2" />
+                              Submit Proof
+                            </button>
+                          </div>
                         </div>
 
                         {task.rejectionComment && (
@@ -640,6 +744,123 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
           </div>
         )}
       </div>
+
+      {/* Task Detail Modal with Navigation */}
+      {taskDetailModal.isOpen && taskDetailModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-bold text-gray-800">Task Navigation</h3>
+              <button
+                onClick={() => setTaskDetailModal({ isOpen: false, report: null })}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Left Column - Task Info */}
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Task Details</h4>
+                  <img
+                    src={taskDetailModal.report.imageUrl}
+                    alt="Task"
+                    className="w-full h-48 object-cover rounded-xl mb-4"
+                  />
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <p className="text-sm text-gray-600 mb-1">
+                      <span className="font-medium">Reporter:</span> {taskDetailModal.report.userName}
+                    </p>
+                    <p className="text-sm text-gray-600 mb-1">
+                      <span className="font-medium">Contact:</span> {taskDetailModal.report.userPhone}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      <span className="font-medium">Assigned:</span> {taskDetailModal.report.submittedAt.toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Location Details</h4>
+                  <div className="bg-blue-50 rounded-xl p-4 mb-4">
+                    <div className="flex items-center text-blue-700 mb-2">
+                      <MapPin size={16} className="mr-2" />
+                      <span className="text-sm font-medium">{taskDetailModal.report.location.address}</span>
+                    </div>
+                    <div className="text-xs text-blue-600">
+                      {taskDetailModal.report.location.lat.toFixed(6)}, {taskDetailModal.report.location.lng.toFixed(6)}
+                    </div>
+                    {currentLocation && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        Distance: {Math.round(calculateDistance(
+                          currentLocation.lat, 
+                          currentLocation.lng, 
+                          taskDetailModal.report.location.lat, 
+                          taskDetailModal.report.location.lng
+                        ))}m from your location
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <a
+                      href={getDirectionsUrl(taskDetailModal.report)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 flex items-center justify-center px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+                    >
+                      <Route size={16} className="mr-2" />
+                      Open in Google Maps
+                    </a>
+                    <button
+                      onClick={() => {
+                        setTaskDetailModal({ isOpen: false, report: null });
+                        openProofModal(taskDetailModal.report!);
+                      }}
+                      className="flex-1 flex items-center justify-center px-4 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors"
+                    >
+                      <Camera size={16} className="mr-2" />
+                      Submit Proof
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Map with Directions */}
+              <div className="space-y-6">
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-3">Navigation Map</h4>
+                  {mapsLoaded ? (
+                    <div 
+                      ref={taskMapRef}
+                      className="w-full h-96 rounded-xl border border-gray-200"
+                    />
+                  ) : (
+                    <div className="w-full h-96 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <div className="text-center">
+                        <Map size={48} className="text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-500">Loading map...</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <h5 className="font-semibold text-orange-800 mb-2">Navigation Instructions</h5>
+                  <ul className="text-sm text-orange-700 space-y-1">
+                    <li>• Blue route shows the path to the task location</li>
+                    <li>• Red marker indicates the exact waste location</li>
+                    <li>• Use "Open in Google Maps" for turn-by-turn navigation</li>
+                    <li>• Submit proof when you reach within 50m of the location</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proof Submission Modal */}
       {proofModal.isOpen && proofModal.report && (
