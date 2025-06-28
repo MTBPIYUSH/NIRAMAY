@@ -242,6 +242,41 @@ export const validateWorkerAssignment = (
   };
 };
 
+export const updateSubWorkerStatus = async (
+  workerId: string,
+  newStatus: 'available' | 'busy' | 'offline'
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', workerId)
+      .eq('role', 'subworker');
+
+    if (error) {
+      console.error('Error updating subworker status:', error);
+      return {
+        success: false,
+        error: 'Failed to update worker status'
+      };
+    }
+
+    return {
+      success: true
+    };
+
+  } catch (err) {
+    console.error('Error in updateSubWorkerStatus:', err);
+    return {
+      success: false,
+      error: 'Unexpected error occurred while updating status'
+    };
+  }
+};
+
 export const assignTaskToSubWorker = async (
   reportId: string,
   workerId: string
