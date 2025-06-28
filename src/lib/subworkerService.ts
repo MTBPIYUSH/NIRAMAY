@@ -211,7 +211,7 @@ export const assignTaskToSubWorker = async (
   workerId: string
 ): Promise<void> => {
   try {
-    console.log('📋 Assigning task:', reportId, 'to worker:', workerId);
+    console.log('Assigning task:', reportId, 'to worker:', workerId);
 
     // Start a transaction-like operation
     const { error: reportError } = await supabase
@@ -224,7 +224,7 @@ export const assignTaskToSubWorker = async (
       .eq('id', reportId);
 
     if (reportError) {
-      console.error('❌ Error updating report:', reportError);
+      console.error('Error updating report:', reportError);
       throw reportError;
     }
 
@@ -239,7 +239,7 @@ export const assignTaskToSubWorker = async (
       .eq('id', workerId);
 
     if (workerError) {
-      console.error('❌ Error updating worker status:', workerError);
+      console.error('Error updating worker status:', workerError);
       // Rollback report assignment
       await supabase
         .from('reports')
@@ -252,10 +252,10 @@ export const assignTaskToSubWorker = async (
       throw workerError;
     }
 
-    console.log('✅ Task assigned successfully');
+    console.log('Task assigned successfully');
 
   } catch (error) {
-    console.error('❌ Error in assignTaskToSubWorker:', error);
+    console.error('Error in assignTaskToSubWorker:', error);
     throw error;
   }
 };
