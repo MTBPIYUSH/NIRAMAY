@@ -29,7 +29,7 @@ export const Logo: React.FC<LogoProps> = ({
   className = '',
   showText = true 
 }) => {
-  const logoClasses = `${sizeClasses[size]} ${className}`;
+  const logoClasses = `${sizeClasses[size]} object-contain ${className}`;
   const textClasses = `${textSizeClasses[size]} font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent`;
 
   if (variant === 'icon') {
@@ -52,7 +52,7 @@ export const Logo: React.FC<LogoProps> = ({
   }
 
   return (
-    <div className={`flex items-center space-x-2 ${className}`}>
+    <div className={`flex items-center space-x-3 ${className}`}>
       <img
         src="/logo-niramay.png"
         alt="Niramay Logo"

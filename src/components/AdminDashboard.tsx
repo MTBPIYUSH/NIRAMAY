@@ -3,6 +3,7 @@ import { BarChart3, Users, AlertTriangle, CheckCircle, Clock, MapPin, Phone, Sta
 import { mockSubWorkers, mockAnalytics } from '../data/mockData';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint, SubWorker } from '../types';
+import { Logo } from './Logo';
 
 interface AdminDashboardProps {
   user: Profile;
@@ -356,9 +357,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-sm">N</span>
-              </div>
+              <Logo size="md" className="mr-3" />
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Niramay Admin</h1>
                 <p className="text-sm text-gray-600">{user.ward}, {user.city}</p>

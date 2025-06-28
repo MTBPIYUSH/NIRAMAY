@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint, SubWorker } from '../types';
+import { Logo } from './Logo';
 
 interface SubWorkerDashboardProps {
   user: Profile;
@@ -312,9 +313,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-orange-400 to-red-600 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-sm">N</span>
-              </div>
+              <Logo size="md" className="mr-3" />
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Niramay Worker</h1>
                 <p className="text-sm text-gray-600">{currentWorker.name} - {currentWorker.ward}</p>
