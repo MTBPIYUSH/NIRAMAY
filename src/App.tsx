@@ -32,6 +32,7 @@ function App() {
     setCurrentView('landing');
   };
 
+  // Reduce loading time and show content faster
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-indigo-100 flex items-center justify-center">
@@ -40,6 +41,7 @@ function App() {
             <span className="text-white font-bold text-xl">N</span>
           </div>
           <div className="text-lg font-semibold text-gray-700">Loading Niramay...</div>
+          <div className="text-sm text-gray-500 mt-2">Connecting to services...</div>
         </div>
       </div>
     );
