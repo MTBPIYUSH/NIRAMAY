@@ -6,53 +6,140 @@ export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sessionChecked, setSessionChecked] = useState(false);
 
   useEffect(() => {
-    // Get initial session
+    let mounted = true;
+
+    // Get initial session with timeout and error handling
     const getInitialSession = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        setUser(session?.user ?? null);
-        
+        // Set a timeout for the session check
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+        );
+
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any;
+
+        if (error) {
+          console.error('Error getting session:', error);
+          // Clear any stale session data
+          await clearAuthState();
+          return;
+        }
+
+        if (!mounted) return;
+
         if (session?.user) {
+          console.log('Found existing session for user:', session.user.id);
+          setUser(session.user);
           await fetchProfile(session.user.id);
+        } else {
+          console.log('No existing session found');
+          setUser(null);
+          setProfile(null);
         }
       } catch (error) {
-        console.error('Error getting session:', error);
+        console.error('Session check failed:', error);
+        // Clear any stale session data on error
+        await clearAuthState();
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          setSessionChecked(true);
+        }
+      }
+    };
+
+    // Clear authentication state
+    const clearAuthState = async () => {
+      try {
+        // Clear Supabase session
+        await supabase.auth.signOut();
+        
+        // Clear local storage items that might be causing issues
+        const keysToRemove = [
+          'supabase.auth.token',
+          'sb-qnqbbvbotcqmpdtixlgi-auth-token',
+          'sb-auth-token'
+        ];
+        
+        keysToRemove.forEach(key => {
+          try {
+            localStorage.removeItem(key);
+            sessionStorage.removeItem(key);
+          } catch (e) {
+            // Ignore errors when clearing storage
+          }
+        });
+
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+        }
+      } catch (error) {
+        console.error('Error clearing auth state:', error);
       }
     };
 
     getInitialSession();
 
-    // Listen for auth changes
+    // Listen for auth changes with error handling
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state change:', event, session?.user?.id);
-        setUser(session?.user ?? null);
         
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
+        if (!mounted) return;
+
+        try {
+          if (event === 'SIGNED_OUT' || !session?.user) {
+            setUser(null);
+            setProfile(null);
+          } else if (session?.user) {
+            setUser(session.user);
+            await fetchProfile(session.user.id);
+          }
+        } catch (error) {
+          console.error('Error handling auth state change:', error);
+          await clearAuthState();
+        } finally {
+          if (mounted && sessionChecked) {
+            setLoading(false);
+          }
         }
-        
-        setLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    // Cleanup function
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
     try {
       console.log('Fetching profile for user:', userId);
-      const { data, error } = await supabase
+      
+      // Add timeout to profile fetch
+      const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
+
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)
+      );
+
+      const { data, error } = await Promise.race([
+        profilePromise,
+        timeoutPromise
+      ]) as any;
 
       if (error) {
         console.error('Error fetching profile:', error);
@@ -142,10 +229,6 @@ export const useAuth = () => {
       }
 
       console.log('Auth signup successful:', data);
-
-      // Note: Profile creation will be handled by a database trigger
-      // or we can create it after email confirmation
-      // For now, we'll let the auth state change handle profile creation
       
       return { data, error: null };
     } catch (error: unknown) {
@@ -170,13 +253,8 @@ export const useAuth = () => {
 
       console.log('Signin successful:', data);
 
-      // If signin is successful, fetch the profile
-      if (data.user) {
-        // Add a small delay to allow any triggers to complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await fetchProfile(data.user.id);
-      }
-
+      // Profile will be fetched automatically by the auth state change listener
+      
       return { data, error: null };
     } catch (error: unknown) {
       console.error('Signin error:', error);
@@ -186,15 +264,36 @@ export const useAuth = () => {
 
   const signOut = async () => {
     try {
+      setLoading(true);
+      
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
+      // Clear local state
       setUser(null);
       setProfile(null);
+      
+      // Clear any cached data
+      const keysToRemove = [
+        'supabase.auth.token',
+        'sb-qnqbbvbotcqmpdtixlgi-auth-token',
+        'sb-auth-token'
+      ];
+      
+      keysToRemove.forEach(key => {
+        try {
+          localStorage.removeItem(key);
+          sessionStorage.removeItem(key);
+        } catch (e) {
+          // Ignore errors when clearing storage
+        }
+      });
       
       return { error: null };
     } catch (error: unknown) {
       return { error };
+    } finally {
+      setLoading(false);
     }
   };
 
