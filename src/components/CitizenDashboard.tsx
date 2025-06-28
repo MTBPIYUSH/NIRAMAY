@@ -24,7 +24,6 @@ import { Profile, supabase } from '../lib/supabase';
 import { Complaint } from '../types';
 import { analyzeWasteReport, validateImageForAnalysis } from '../lib/gemini';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, Notification } from '../lib/notifications';
-import { Logo } from './Logo';
 
 interface CitizenDashboardProps {
   user: Profile;
@@ -381,7 +380,9 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
           <div className="flex justify-between items-center py-4">
             {/* Logo Section */}
             <div className="flex items-center">
-              <Logo size="md" className="mr-3" />
+              <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-3 shadow-lg">
+                <span className="text-white font-bold text-lg">N</span>
+              </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Niramay</h1>
                 <p className="text-xs text-gray-500">Clean India Initiative</p>
@@ -532,7 +533,9 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-3xl p-8 shadow-2xl border border-gray-100">
               <div className="text-center mb-8">
-                <Logo size="lg" className="mx-auto mb-4 shadow-xl" />
+                <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                  <Camera size={40} className="text-white" />
+                </div>
                 <h2 className="text-3xl font-bold text-gray-800 mb-2">Report Garbage Issue</h2>
                 <p className="text-gray-600">Help keep our community clean by reporting waste issues</p>
                 <div className="flex items-center justify-center mt-4 text-sm text-purple-600 bg-purple-50 px-4 py-2 rounded-full">

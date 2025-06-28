@@ -10,6 +10,7 @@ import {
   CheckCircle, 
   ArrowRight, 
   Star,
+  Leaf,
   Shield,
   Zap,
   Heart,
@@ -20,7 +21,6 @@ import {
   Phone,
   ChevronDown
 } from 'lucide-react';
-import { Logo } from './Logo';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -109,7 +109,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           {/* Logo and Brand */}
           <div className="flex items-center justify-center mb-8">
-            <Logo size="xl" className="mr-4 shadow-lg" />
+            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mr-4 shadow-lg">
+              <Leaf className="text-white" size={32} />
+            </div>
             <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-green-600 via-orange-500 to-blue-600 bg-clip-text text-transparent">
               Niramay
             </h1>
@@ -219,7 +221,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <div className="relative">
               <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-3xl p-8 text-white shadow-2xl">
                 <div className="text-center mb-8">
-                  <Logo size="lg" variant="icon" className="mx-auto mb-4 bg-white/20 rounded-2xl p-4" />
+                  <div className="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Leaf size={40} className="text-white" />
+                  </div>
                   <h4 className="text-2xl font-bold mb-2">Swachh Bharat Mission</h4>
                   <p className="text-green-100">Supporting India's cleanliness vision</p>
                 </div>
@@ -422,7 +426,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
 
             <div className="grid grid-cols-2 gap-6">
               {[
-                { icon: Logo, title: 'Clean India Vision', desc: 'Supporting Swachh Bharat Abhiyan', color: 'bg-green-100 text-green-600' },
+                { icon: Leaf, title: 'Clean India Vision', desc: 'Supporting Swachh Bharat Abhiyan', color: 'bg-green-100 text-green-600' },
                 { icon: Award, title: 'Eco Points', desc: 'Gamified reward system', color: 'bg-yellow-100 text-yellow-600' },
                 { icon: MapPin, title: 'Real-time Tracking', desc: 'Live location monitoring', color: 'bg-blue-100 text-blue-600' },
                 { icon: Zap, title: 'AI Optimization', desc: 'Smart task assignment', color: 'bg-purple-100 text-purple-600' }
@@ -431,11 +435,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
                 return (
                   <div key={index} className="bg-white rounded-2xl p-6 shadow-lg hover:shadow-xl transition-all duration-300">
                     <div className={`w-12 h-12 ${item.color} rounded-xl flex items-center justify-center mb-4`}>
-                      {item.icon === Logo ? (
-                        <Logo size="sm" variant="icon" />
-                      ) : (
-                        <Icon size={24} />
-                      )}
+                      <Icon size={24} />
                     </div>
                     <h4 className="font-bold text-gray-800 mb-2">{item.title}</h4>
                     <p className="text-sm text-gray-600">{item.desc}</p>
@@ -510,7 +510,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             {/* Brand */}
             <div className="md:col-span-2">
               <div className="flex items-center mb-6">
-                <Logo size="md" variant="icon" className="mr-3 bg-white/10 rounded-xl p-2" />
+                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-3">
+                  <Leaf className="text-white" size={24} />
+                </div>
                 <h4 className="text-2xl font-bold">Niramay</h4>
               </div>
               <p className="text-gray-400 mb-6 max-w-md leading-relaxed">
