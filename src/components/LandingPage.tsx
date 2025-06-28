@@ -107,27 +107,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
         </div>
 
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          {/* Logo and Brand */}
-          <div className="flex items-center justify-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mr-4 shadow-lg">
-              <Leaf className="text-white" size={32} />
+          {/* Banner */}
+          <div className="flex items-center justify-center mb-4">
+            <div className="px-6 py-2 bg-green-100 rounded-full text-green-800 text-sm font-medium flex items-center gap-2">
+              <Leaf className="w-4 h-4" /> Transforming Waste into a Cleaner India with AI
             </div>
-            <h1 className="text-4xl md:text-6xl font-bold bg-gradient-to-r from-green-600 via-orange-500 to-blue-600 bg-clip-text text-transparent">
-              Niramay
+          </div>
+
+          {/* Main Hindi Text */}
+          <div className="mb-6">
+            <h1 className="text-5xl md:text-7xl font-bold mb-2">
+              <span className="text-orange-600">स्वच्छ</span>{" "}
+              <span className="text-gray-900">भारत,</span>
+            </h1>
+            <h1 className="text-5xl md:text-7xl font-bold">
+              <span className="text-green-600">स्वस्थ</span>{" "}
+              <span className="text-gray-900">भविष्य</span>
             </h1>
           </div>
 
-          {/* Main Headline */}
-          <h2 className="text-4xl md:text-7xl font-bold text-gray-800 mb-6 leading-tight">
-            Transforming Waste into a
-            <span className="block bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
-              Cleaner India
-            </span>
+          {/* English Subtitle */}
+          <h2 className="text-2xl md:text-3xl text-gray-700 font-medium mb-8">
+            Clean India, Healthy Future
           </h2>
 
-          {/* Subtext */}
-          <p className="text-xl md:text-2xl text-gray-600 mb-12 max-w-4xl mx-auto leading-relaxed">
-            Empowering citizens, municipal workers, and technology to build sustainable Indian cities through intelligent waste management.
+          {/* Mission Statement */}
+          <p className="text-lg md:text-xl text-gray-600 mb-12 max-w-3xl mx-auto leading-relaxed">
+            Empowering Indian citizens, municipal workers, and technology to build sustainable cities. Join the digital revolution in waste management supporting the Swachh Bharat Mission.
           </p>
 
           {/* CTA Buttons */}
