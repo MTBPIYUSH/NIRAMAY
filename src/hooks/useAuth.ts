@@ -15,16 +15,8 @@ export const useAuth = () => {
       try {
         console.log('🔄 Initializing authentication...');
         
-        // Get initial session with timeout
-        const sessionPromise = supabase.auth.getSession();
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 30000)
-        );
-
-        const { data: { session }, error } = await Promise.race([
-          sessionPromise,
-          timeoutPromise
-        ]) as any;
+        // Get initial session with increased timeout
+        const { data: { session }, error } = await supabase.auth.getSession();
 
         if (error) {
           console.error('❌ Session check error:', error);
@@ -103,20 +95,11 @@ export const useAuth = () => {
     try {
       console.log('🔍 Fetching profile for user:', userId);
       
-      const profilePromise = supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
-
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 30000)
-      );
-
-      const { data, error } = await Promise.race([
-        profilePromise,
-        timeoutPromise
-      ]) as any;
 
       if (error) {
         console.error('❌ Profile fetch error:', error);
@@ -145,7 +128,7 @@ export const useAuth = () => {
     } catch (error) {
       console.error('❌ Profile fetch failed:', error);
       
-      if (user && !error.message?.includes('timeout')) {
+      if (user) {
         console.log('🔄 Attempting to create profile after error...');
         await createProfileForUser(userId, user);
       } else {
