@@ -8,18 +8,10 @@ export const useAuth = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session with timeout
+    // Get initial session
     const getInitialSession = async () => {
       try {
-        // Set a timeout to prevent infinite loading
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout')), 5000)
-        );
-
-        const sessionPromise = supabase.auth.getSession();
-        
-        const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
-        
+        const { data: { session } } = await supabase.auth.getSession();
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -27,9 +19,6 @@ export const useAuth = () => {
         }
       } catch (error) {
         console.error('Error getting session:', error);
-        // Continue without authentication if Supabase is not available
-        setUser(null);
-        setProfile(null);
       } finally {
         setLoading(false);
       }
@@ -37,35 +26,22 @@ export const useAuth = () => {
 
     getInitialSession();
 
-    // Listen for auth changes with error handling
-    let subscription: any;
-    
-    try {
-      const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-          setUser(session?.user ?? null);
-          
-          if (session?.user) {
-            await fetchProfile(session.user.id);
-          } else {
-            setProfile(null);
-          }
-          
-          setLoading(false);
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          await fetchProfile(session.user.id);
+        } else {
+          setProfile(null);
         }
-      );
-      
-      subscription = authSubscription;
-    } catch (error) {
-      console.error('Error setting up auth listener:', error);
-      setLoading(false);
-    }
-
-    return () => {
-      if (subscription) {
-        subscription.unsubscribe();
+        
+        setLoading(false);
       }
-    };
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const fetchProfile = async (userId: string) => {
