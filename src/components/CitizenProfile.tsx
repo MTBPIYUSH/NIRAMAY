@@ -438,22 +438,13 @@ export const CitizenProfile: React.FC<CitizenProfileProps> = ({
                 Account Statistics
               </h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="bg-green-50 border border-green-200 rounded-xl p-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-green-600 mb-1">
                       {profile.eco_points || 0}
                     </div>
                     <div className="text-sm text-green-700">Eco Points</div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 mb-1">
-                      {profile.points || 0}
-                    </div>
-                    <div className="text-sm text-blue-700">Total Points</div>
                   </div>
                 </div>
 

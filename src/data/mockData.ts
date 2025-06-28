@@ -6,7 +6,7 @@ export const mockUsers: User[] = [
     name: 'Arjun Sharma',
     email: 'arjun@example.com',
     role: 'citizen',
-    points: 1250,
+    eco_points: 1250, // Changed from points to eco_points
     location: 'Sector 14, Gurgaon'
   },
   {
@@ -44,7 +44,7 @@ export const mockComplaints: Complaint[] = [
     assignedTo: '3',
     assignedWorkerName: 'Ravi Kumar',
     submittedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    pointsAwarded: 50
+    ecoPoints: 30 // Changed from pointsAwarded to ecoPoints, high priority = 30 points
   },
   {
     id: '2',
@@ -64,7 +64,7 @@ export const mockComplaints: Complaint[] = [
     assignedWorkerName: 'Ravi Kumar',
     submittedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
     completedAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
-    pointsAwarded: 75
+    ecoPoints: 20 // Changed from pointsAwarded to ecoPoints, medium priority = 20 points
   },
   {
     id: '3',
@@ -79,8 +79,9 @@ export const mockComplaints: Complaint[] = [
       address: 'Residential Complex, Sector 14, Gurgaon'
     },
     status: 'submitted',
-    priority: 'critical',
-    submittedAt: new Date(Date.now() - 30 * 60 * 1000)
+    priority: 'urgent',
+    submittedAt: new Date(Date.now() - 30 * 60 * 1000),
+    ecoPoints: 40 // urgent priority = 40 points
   }
 ];
 
@@ -123,7 +124,7 @@ export const mockEcoProducts: EcoProduct[] = [
     id: '1',
     name: 'Smart Dustbin',
     description: 'IoT-enabled dustbin with overflow sensors',
-    points: 500,
+    eco_points: 500, // Changed from points to eco_points
     image: 'https://images.pexels.com/photos/3735187/pexels-photo-3735187.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'dustbins',
     stock: 15
@@ -132,7 +133,7 @@ export const mockEcoProducts: EcoProduct[] = [
     id: '2',
     name: 'Organic Compost Kit',
     description: 'Complete kit for home composting',
-    points: 300,
+    eco_points: 300, // Changed from points to eco_points
     image: 'https://images.pexels.com/photos/1444321/pexels-photo-1444321.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'compost',
     stock: 25
@@ -141,7 +142,7 @@ export const mockEcoProducts: EcoProduct[] = [
     id: '3',
     name: 'Recycling Tools Set',
     description: 'Professional tools for waste segregation',
-    points: 400,
+    eco_points: 400, // Changed from points to eco_points
     image: 'https://images.pexels.com/photos/3735196/pexels-photo-3735196.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'tools',
     stock: 12
@@ -150,7 +151,7 @@ export const mockEcoProducts: EcoProduct[] = [
     id: '4',
     name: 'Air Purifying Plants',
     description: 'Set of 5 air purifying indoor plants',
-    points: 200,
+    eco_points: 200, // Changed from points to eco_points
     image: 'https://images.pexels.com/photos/1407305/pexels-photo-1407305.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'plants',
     stock: 30
@@ -159,7 +160,7 @@ export const mockEcoProducts: EcoProduct[] = [
     id: '5',
     name: 'Eco-Friendly Bags',
     description: 'Reusable jute bags for shopping',
-    points: 150,
+    eco_points: 150, // Changed from points to eco_points
     image: 'https://images.pexels.com/photos/1029896/pexels-photo-1029896.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'tools',
     stock: 50
@@ -168,7 +169,7 @@ export const mockEcoProducts: EcoProduct[] = [
     id: '6',
     name: 'Solar LED Lights',
     description: 'Solar-powered LED lights for gardens',
-    points: 350,
+    eco_points: 350, // Changed from points to eco_points
     image: 'https://images.pexels.com/photos/1108572/pexels-photo-1108572.jpeg?auto=compress&cs=tinysrgb&w=400',
     category: 'tools',
     stock: 20
@@ -195,7 +196,7 @@ export const mockLeaderboard: LeaderboardEntry[] = [
   {
     id: '1',
     name: 'Arjun Sharma',
-    points: 1250,
+    eco_points: 1250, // Changed from points to eco_points
     rank: 4,
     city: 'Gurgaon',
     reportsCount: 12
@@ -203,7 +204,7 @@ export const mockLeaderboard: LeaderboardEntry[] = [
   {
     id: '2',
     name: 'Priya Singh',
-    points: 1850,
+    eco_points: 1850, // Changed from points to eco_points
     rank: 1,
     city: 'Gurgaon',
     reportsCount: 18
@@ -211,7 +212,7 @@ export const mockLeaderboard: LeaderboardEntry[] = [
   {
     id: '3',
     name: 'Rajesh Kumar',
-    points: 1650,
+    eco_points: 1650, // Changed from points to eco_points
     rank: 2,
     city: 'Gurgaon',
     reportsCount: 15
@@ -219,7 +220,7 @@ export const mockLeaderboard: LeaderboardEntry[] = [
   {
     id: '4',
     name: 'Anita Verma',
-    points: 1450,
+    eco_points: 1450, // Changed from points to eco_points
     rank: 3,
     city: 'Gurgaon',
     reportsCount: 14
@@ -227,7 +228,7 @@ export const mockLeaderboard: LeaderboardEntry[] = [
   {
     id: '5',
     name: 'Vikram Joshi',
-    points: 1150,
+    eco_points: 1150, // Changed from points to eco_points
     rank: 5,
     city: 'Gurgaon',
     reportsCount: 11

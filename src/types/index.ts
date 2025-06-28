@@ -3,7 +3,7 @@ export interface User {
   name: string;
   email: string;
   role: 'citizen' | 'admin' | 'subworker';
-  points?: number;
+  eco_points?: number; // Only eco-points, removed points
   location?: string;
   ward?: string;
   city?: string;
@@ -29,8 +29,7 @@ export interface Complaint {
   assignedWorkerName?: string;
   submittedAt: Date;
   completedAt?: Date;
-  pointsAwarded?: number;
-  ecoPoints?: number;
+  ecoPoints?: number; // Only eco-points, removed pointsAwarded
   proofImage?: string;
   proofLocation?: {
     lat: number;
@@ -45,7 +44,7 @@ export interface Complaint {
     cleanup_difficulty: string;
     reasoning: string;
   };
-  ward?: string; // Added for ward-based filtering
+  ward?: string;
 }
 
 export interface SubWorker {
@@ -54,7 +53,7 @@ export interface SubWorker {
   email: string;
   phone: string;
   status: 'available' | 'busy';
-  ward: string; // Changed from optional to required for ward-based assignment
+  ward: string;
   completedTasks: number;
   rating: number;
   currentTask?: string;
@@ -64,7 +63,7 @@ export interface EcoProduct {
   id: string;
   name: string;
   description: string;
-  points: number;
+  eco_points: number; // Changed from points to eco_points
   image: string;
   category: 'dustbins' | 'compost' | 'tools' | 'plants';
   stock: number;
@@ -86,7 +85,7 @@ export interface Analytics {
 export interface LeaderboardEntry {
   id: string;
   name: string;
-  points: number;
+  eco_points: number; // Changed from points to eco_points
   rank: number;
   city: string;
   reportsCount: number;

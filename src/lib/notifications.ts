@@ -99,9 +99,9 @@ export const NotificationTemplates = {
     type: 'assignment' as const
   }),
 
-  taskApproved: (points: number) => ({
+  taskApproved: (ecoPoints: number) => ({ // Changed from points to ecoPoints
     title: 'Task Approved!',
-    message: `Great work! Your cleanup has been approved and you've earned ${points} eco-points.`,
+    message: `Great work! Your cleanup has been approved and you've earned ${ecoPoints} eco-points.`,
     type: 'success' as const
   }),
 
@@ -111,9 +111,9 @@ export const NotificationTemplates = {
     type: 'rejection' as const
   }),
 
-  pointsAwarded: (points: number, totalPoints: number) => ({
+  ecoPointsAwarded: (ecoPoints: number, totalEcoPoints: number) => ({ // Changed from pointsAwarded to ecoPointsAwarded
     title: 'Eco-Points Earned!',
-    message: `You've earned ${points} eco-points! Your total balance is now ${totalPoints} points.`,
+    message: `You've earned ${ecoPoints} eco-points! Your total balance is now ${totalEcoPoints} eco-points.`,
     type: 'success' as const
   }),
 
@@ -123,9 +123,9 @@ export const NotificationTemplates = {
     type: 'info' as const
   }),
 
-  redemptionConfirmed: (itemName: string, pointsSpent: number) => ({
+  redemptionConfirmed: (itemName: string, ecoPointsSpent: number) => ({ // Changed from pointsSpent to ecoPointsSpent
     title: 'Redemption Confirmed',
-    message: `Your redemption of ${itemName} has been confirmed. ${pointsSpent} points have been deducted from your account.`,
+    message: `Your redemption of ${itemName} has been confirmed. ${ecoPointsSpent} eco-points have been deducted from your account.`,
     type: 'success' as const
   })
 };
