@@ -14,10 +14,10 @@ export const useAuth = () => {
     // Get initial session with timeout and error handling
     const getInitialSession = async () => {
       try {
-        // Set a timeout for the session check - increased to 60 seconds
+        // Set a timeout for the session check - reduced to 10 seconds for better UX
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 60000)
+          setTimeout(() => reject(new Error('Session check timeout')), 10000)
         );
 
         const { data: { session }, error } = await Promise.race([
@@ -125,15 +125,15 @@ export const useAuth = () => {
     try {
       console.log('Fetching profile for user:', userId);
       
-      // Add timeout to profile fetch - increased to 60 seconds
+      // Add timeout to profile fetch - reduced to 10 seconds for better UX
       const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle() instead of single() to handle no rows gracefully
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 60000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
       );
 
       const { data, error } = await Promise.race([
@@ -143,17 +143,16 @@ export const useAuth = () => {
 
       if (error) {
         console.error('Error fetching profile:', error);
-        
-        // If profile doesn't exist, try to create one
-        if (error.code === 'PGRST116') { // No rows returned
-          console.log('Profile not found, attempting to create one...');
-          if (user) {
-            await createProfileForUser(userId, user);
-          }
-          return;
-        }
-        
         setProfile(null);
+        return;
+      }
+
+      if (!data) {
+        // Profile doesn't exist, try to create one
+        console.log('Profile not found, attempting to create one...');
+        if (user) {
+          await createProfileForUser(userId, user);
+        }
         return;
       }
 
@@ -185,8 +184,7 @@ export const useAuth = () => {
             name: user.user_metadata?.name || 'User',
             aadhar: user.user_metadata?.aadhar,
             phone: user.user_metadata?.phone,
-            points: 0,
-            eco_points: 0,
+            eco_points: 0, // Only eco_points exists in the schema, removed 'points'
             status: 'available',
             created_at: now,
             updated_at: now
