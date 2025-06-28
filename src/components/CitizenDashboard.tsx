@@ -164,7 +164,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     }
   };
 
-  // Handle file input for camera
+  // Handle file input for camera - ONLY camera input, no file selection
   const handleImageCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
@@ -428,11 +428,19 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                           className="hidden"
                         />
                         <Camera size={20} className="mb-1" />
-                        <span className="text-xs">Add Photo</span>
+                        <span className="text-xs text-center">Take Photo</span>
                       </label>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500">Capture up to 4 high-quality images of the waste issue</p>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-start">
+                      <Camera size={20} className="text-blue-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-semibold mb-1">Camera Only</p>
+                        <p>Use your device's camera to capture clear, high-quality images of the waste issue. File uploads are not supported.</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-center text-sm text-gray-600 bg-blue-50 p-4 rounded-2xl border border-blue-200">

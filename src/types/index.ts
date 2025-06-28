@@ -13,6 +13,7 @@ export interface Complaint {
   id: string;
   userId: string;
   userName: string;
+  userPhone?: string;
   title: string;
   description: string;
   imageUrl: string;

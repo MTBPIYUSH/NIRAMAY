@@ -21,11 +21,18 @@ interface DatabaseReport {
   updated_at: string;
 }
 
+interface ReporterProfile {
+  id: string;
+  name: string;
+  phone?: string;
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'complaints' | 'workers' | 'analytics'>('dashboard');
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [workers, setWorkers] = useState<SubWorker[]>(mockSubWorkers);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [reporterProfiles, setReporterProfiles] = useState<Map<string, ReporterProfile>>(new Map());
 
   // Fetch reports from database for the admin's region
   useEffect(() => {
@@ -49,11 +56,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       // Then fetch user profiles for the reports
       const userIds = reportsData?.map(report => report.user_id).filter(Boolean) || [];
       
-      let profilesData: any[] = [];
+      let profilesData: ReporterProfile[] = [];
       if (userIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, name')
+          .select('id, name, phone')
           .in('id', userIds);
 
         if (profilesError) {
@@ -65,24 +72,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
 
       // Create a map of user_id to profile for quick lookup
       const profileMap = new Map(profilesData.map(profile => [profile.id, profile]));
+      setReporterProfiles(profileMap);
 
       // Convert database reports to complaint format
-      const convertedComplaints: Complaint[] = (reportsData || []).map((report: DatabaseReport) => ({
-        id: report.id,
-        userId: report.user_id,
-        userName: profileMap.get(report.user_id)?.name || 'Unknown User',
-        title: 'Waste Report', // Default title since we don't store it in DB yet
-        description: 'Reported waste issue', // Default description
-        imageUrl: report.images[0] || '',
-        location: {
-          lat: report.lat,
-          lng: report.lng,
-          address: report.address
-        },
-        status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
-        priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
-        submittedAt: new Date(report.created_at)
-      }));
+      const convertedComplaints: Complaint[] = (reportsData || []).map((report: DatabaseReport) => {
+        const reporterProfile = profileMap.get(report.user_id);
+        return {
+          id: report.id,
+          userId: report.user_id,
+          userName: reporterProfile?.name || 'Unknown User',
+          userPhone: reporterProfile?.phone || 'No phone',
+          title: 'Waste Report', // Default title since we don't store it in DB yet
+          description: 'Reported waste issue', // Default description
+          imageUrl: report.images[0] || '',
+          location: {
+            lat: report.lat,
+            lng: report.lng,
+            address: report.address
+          },
+          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
+          priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
+          submittedAt: new Date(report.created_at)
+        };
+      });
 
       // Filter reports by admin's region if ward/city is specified
       let filteredComplaints = convertedComplaints;
@@ -292,6 +304,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                         <div className="flex-1">
                           <h4 className="font-medium text-gray-800">{complaint.title}</h4>
                           <p className="text-sm text-gray-600">{complaint.userName}</p>
+                          <p className="text-xs text-gray-500">{complaint.userPhone}</p>
                         </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
                           {complaint.status}
@@ -368,7 +381,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                         <div className="flex justify-between items-start">
                           <div>
                             <h3 className="text-xl font-semibold text-gray-800">{complaint.title}</h3>
-                            <p className="text-gray-600">Reported by: {complaint.userName}</p>
+                            <div className="space-y-1">
+                              <p className="text-gray-600">Reported by: <span className="font-medium">{complaint.userName}</span></p>
+                              <p className="text-gray-600">Contact: <span className="font-medium">{complaint.userPhone}</span></p>
+                            </div>
                           </div>
                           <div className="flex space-x-2">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
@@ -392,11 +408,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                             Submitted: {complaint.submittedAt.toLocaleDateString()}
                           </span>
                           
-                          {complaint.status === 'submitted' && (
+                          {complaint.status === 'submitted' && availableWorkers.length > 0 && (
                             <div className="flex items-center space-x-2">
                               <select
                                 onChange={(e) => e.target.value && assignWorker(complaint.id, e.target.value)}
-                                className="px-3 py-1 border border-gray-300 rounded-lg text-sm"
+                                className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 defaultValue=""
                               >
                                 <option value="">Assign Worker</option>
@@ -408,9 +424,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
                               </select>
                             </div>
                           )}
+
+                          {complaint.status === 'submitted' && availableWorkers.length === 0 && (
+                            <div className="text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
+                              No workers available
+                            </div>
+                          )}
                           
                           {complaint.assignedWorkerName && (
-                            <div className="text-sm text-blue-600">
+                            <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
                               Assigned to: {complaint.assignedWorkerName}
                             </div>
                           )}
