@@ -123,7 +123,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted }) => {
             <span className="block bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
               Cleaner India
             </span>
-            <span className="block text-3xl md:text-5xl mt-2">with AI</span>
           </h2>
 
           {/* Subtext */}

@@ -38,6 +38,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     priority: 'medium',
     imageUrl: ''
   });
+  const [images, setImages] = useState<string[]>([]);
 
   const userComplaints = complaints.filter(c => c.userId === user.id);
 
@@ -72,12 +73,18 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
   };
 
   const handleImageCapture = (imageDataUrl: string) => {
-    setNewComplaint((prev: Partial<Complaint>) => ({ ...prev, imageUrl: imageDataUrl }));
+    if (images.length < 4) {
+      setImages(prev => [...prev, imageDataUrl]);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSubmitComplaint = () => {
-    if (!newComplaint.title || !newComplaint.imageUrl) {
-      alert('Please fill the title and capture an image');
+    if (!newComplaint.title || images.length === 0) {
+      alert('Please fill the title and capture at least one image');
       return;
     }
 
@@ -87,7 +94,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       userName: user.name,
       title: newComplaint.title || '',
       description: newComplaint.description || '',
-      imageUrl: newComplaint.imageUrl || '',
+      imageUrl: images[0],
       location: {
         lat: 28.4595 + Math.random() * 0.01,
         lng: 77.0266 + Math.random() * 0.01,
@@ -100,6 +107,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
     setComplaints((prev: Complaint[]) => [newComplaintData, ...prev]);
     setNewComplaint(() => ({ title: '', description: '', priority: 'medium', imageUrl: '' }));
+    setImages([]);
     setActiveTab('complaints');
     alert('Report submitted successfully! Our team will review it shortly.');
   };
@@ -255,40 +263,36 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-3">Photo Evidence *</label>
-                  {newComplaint.imageUrl ? (
-                    <div className="relative">
-                      <img
-                        src={newComplaint.imageUrl}
-                        alt="Captured"
-                        className="w-full h-64 object-cover rounded-2xl shadow-lg"
-                      />
+                  <div className="flex gap-4 mb-4">
+                    {images.map((img, idx) => (
+                      <div key={idx} className="relative">
+                        <img src={img} alt={`Captured ${idx + 1}`} className="w-24 h-24 object-cover rounded-lg" />
+                        <button
+                          onClick={() => removeImage(idx)}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
+                          title="Remove"
+                        >✕</button>
+                      </div>
+                    ))}
+                    {images.length < 4 && (
                       <button
-                        onClick={() => setNewComplaint(prev => ({ ...prev, imageUrl: '' }))}
-                        className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 shadow-lg transition-colors"
-                      >
-                        <Plus size={20} className="rotate-45" />
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setShowCamera(true)}
-                      className="w-full h-64 border-3 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center hover:border-green-500 hover:bg-green-50 transition-all group"
-                    >
-                      <Camera size={64} className="text-gray-400 group-hover:text-green-500 mb-4 transition-colors" />
-                      <span className="text-gray-600 group-hover:text-green-600 font-semibold text-lg">📸 Capture Photo</span>
-                      <span className="text-sm text-gray-500 mt-2">Required for verification</span>
-                    </button>
-                  )}
+                        onClick={() => setShowCamera(true)}
+                        className="w-24 h-24 flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg text-3xl text-gray-400 hover:border-green-500"
+                        title="Add Image"
+                      >+</button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-center text-sm text-gray-600 bg-blue-50 p-4 rounded-2xl border border-blue-200">
                   <MapPin size={20} className="mr-2 text-blue-600" />
-                  <span className="font-medium">📍 Location will be captured automatically</span>
+                  <span className="font-medium">Location will be captured automatically</span>
                 </div>
 
                 <button
                   onClick={handleSubmitComplaint}
-                  className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl"
+                  disabled={images.length === 0}
+                  className={`w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${images.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   Submit Report 🚀
                 </button>
@@ -305,7 +309,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
               <div className="flex flex-col md:flex-row items-center justify-between">
                 <div className="mb-6 md:mb-0">
                   <h2 className="text-3xl font-bold mb-2">
-                    Hello, {user.name?.split(' ')[0] || 'User'}! 👋
+                    Hello, {user.name?.split(' ')[0] || 'User'}!
                   </h2>
                   <p className="text-green-100 text-lg">
                     Let's clean our streets together and make India beautiful!
@@ -328,7 +332,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   className="bg-white text-green-600 px-8 py-4 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 flex items-center"
                 >
                   <Camera size={24} className="mr-3" />
-                  📸 Report Garbage Now
+                  Report Garbage Now
                 </button>
               </div>
             </div>
@@ -390,7 +394,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
             <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100">
               <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
                 <Clock className="text-blue-600 mr-3" size={28} />
-                📋 Recent Activity
+                Recent Activity
               </h3>
               
               {userComplaints.length === 0 ? (
@@ -449,7 +453,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
             <div className="flex items-center justify-between">
               <h2 className="text-3xl font-bold text-gray-800 flex items-center">
                 <Clock className="text-blue-600 mr-3" size={32} />
-                🗂️ My Reports
+                My Reports
               </h2>
               <div className="text-sm text-gray-600">
                 Total: {userComplaints.length} reports
@@ -551,7 +555,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
             <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
               <h2 className="text-3xl font-bold text-gray-800 flex items-center">
                 <ShoppingBag className="text-green-600 mr-3" size={32} />
-                🛒 Eco Store
+                Eco Store
               </h2>
               <div className="flex items-center bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-2xl shadow-lg">
                 <Award size={24} className="mr-3" />
@@ -588,8 +592,8 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                     disabled={(user.points || 0) < product.points || product.stock === 0}
                     className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transform hover:scale-105 shadow-lg hover:shadow-xl"
                   >
-                    {(user.points || 0) < product.points ? '❌ Insufficient Points' : 
-                     product.stock === 0 ? '📦 Out of Stock' : '🎁 Redeem Now'}
+                    {(user.points || 0) < product.points ? 'Insufficient Points' : 
+                    product.stock === 0 ? 'Out of Stock' : 'Redeem Now'}
                   </button>
                 </div>
               ))}
