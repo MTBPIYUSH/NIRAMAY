@@ -1,9 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart3, Users, AlertTriangle, CheckCircle, Clock, MapPin, Phone, Star, UserCheck, X, Eye, ThumbsUp, ThumbsDown } from 'lucide-react';
-import { mockAnalytics } from '../data/mockData';
+import { 
+  Shield, 
+  Users, 
+  Clock, 
+  CheckCircle, 
+  AlertTriangle, 
+  TrendingUp, 
+  MapPin, 
+  User, 
+  ChevronDown, 
+  Eye, 
+  UserCheck, 
+  X, 
+  Camera, 
+  Award, 
+  Filter, 
+  Search, 
+  RefreshCw, 
+  BarChart3, 
+  Settings, 
+  Bell, 
+  Package, 
+  Plus, 
+  Edit3, 
+  Trash2, 
+  Save, 
+  Star, 
+  Phone, 
+  Mail, 
+  Calendar, 
+  Target, 
+  Zap, 
+  Activity, 
+  PieChart, 
+  TrendingDown, 
+  AlertCircle,
+  Sparkles
+} from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
-import { Complaint, SubWorker } from '../types';
-import { validateAndFixEcoPoints } from '../lib/gemini';
+import { Complaint, SubWorker, EcoProduct } from '../types';
+import { createNotification, NotificationTemplates, getUserNotifications, Notification } from '../lib/notifications';
 
 interface AdminDashboardProps {
   user: Profile;
@@ -24,94 +60,125 @@ interface DatabaseReport {
   proof_image?: string;
   proof_lat?: number;
   proof_lng?: number;
+  rejection_comment?: string;
   priority_level?: string;
   eco_points?: number;
+  ai_analysis?: any;
 }
 
 interface ReporterProfile {
   id: string;
   name: string;
   phone?: string;
+  eco_points?: number;
 }
 
 interface WorkerProfile {
   id: string;
   name: string;
   phone?: string;
-  status: string;
+  status?: string;
+  ward?: string;
   assigned_ward?: string;
   task_completion_count?: number;
 }
 
-interface AssignmentModal {
-  isOpen: boolean;
-  reportId: string;
-  reportTitle: string;
-  reportWard: string;
-  workerId: string;
-  workerName: string;
-}
-
-interface DetailModal {
+interface ReportDetailModal {
   isOpen: boolean;
   report: Complaint | null;
 }
 
-interface ApprovalModal {
+interface AssignTaskModal {
   isOpen: boolean;
   report: Complaint | null;
+}
+
+interface ProofReviewModal {
+  isOpen: boolean;
+  report: Complaint | null;
+}
+
+interface EcoStoreModal {
+  isOpen: boolean;
+  product: EcoProduct | null;
+  isEditing: boolean;
+}
+
+interface Analytics {
+  totalReports: number;
+  pendingReports: number;
+  completedReports: number;
+  activeWorkers: number;
+  averageResolutionTime: number;
+  cleanlinessIndex: number;
+  todayReports: number;
+  weeklyTrend: number;
 }
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'complaints' | 'workers' | 'analytics' | 'approvals'>('dashboard');
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'reports' | 'workers' | 'analytics' | 'ecostore'>('dashboard');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  
+  // Data states
+  const [reports, setReports] = useState<Complaint[]>([]);
   const [workers, setWorkers] = useState<SubWorker[]>([]);
+  const [ecoProducts, setEcoProducts] = useState<EcoProduct[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [reporterProfiles, setReporterProfiles] = useState<Map<string, ReporterProfile>>(new Map());
+  const [workerProfiles, setWorkerProfiles] = useState<Map<string, WorkerProfile>>(new Map());
+  
+  // Loading states
   const [loadingReports, setLoadingReports] = useState(false);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
-  const [reporterProfiles, setReporterProfiles] = useState<Map<string, ReporterProfile>>(new Map());
-  const [assignmentModal, setAssignmentModal] = useState<AssignmentModal>({
-    isOpen: false,
-    reportId: '',
-    reportTitle: '',
-    reportWard: '',
-    workerId: '',
-    workerName: ''
-  });
-  const [detailModal, setDetailModal] = useState<DetailModal>({
-    isOpen: false,
-    report: null
-  });
-  const [approvalModal, setApprovalModal] = useState<ApprovalModal>({
-    isOpen: false,
-    report: null
-  });
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [assigningTask, setAssigningTask] = useState(false);
+  const [reviewingProof, setReviewingProof] = useState(false);
+  const [savingProduct, setSavingProduct] = useState(false);
+  
+  // Filter states
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Modal states
+  const [reportDetailModal, setReportDetailModal] = useState<ReportDetailModal>({ isOpen: false, report: null });
+  const [assignTaskModal, setAssignTaskModal] = useState<AssignTaskModal>({ isOpen: false, report: null });
+  const [proofReviewModal, setProofReviewModal] = useState<ProofReviewModal>({ isOpen: false, report: null });
+  const [ecoStoreModal, setEcoStoreModal] = useState<EcoStoreModal>({ isOpen: false, product: null, isEditing: false });
+  
+  // Form states
   const [rejectionComment, setRejectionComment] = useState('');
+  const [productForm, setProductForm] = useState({
+    name: '',
+    description: '',
+    point_cost: 0,
+    quantity: 0,
+    image_url: '',
+    category: 'tools' as 'dustbins' | 'compost' | 'tools' | 'plants' | 'vouchers'
+  });
 
-  // Fetch reports and workers from database
+  const unreadNotifications = notifications.filter(n => !n.is_read);
+
   useEffect(() => {
-    fetchRegionalReports();
-    fetchAvailableWorkers();
-  }, [user.ward, user.city]);
+    fetchAllData();
+  }, [user.id]);
 
-  const extractWardFromAddress = (address: string): string => {
-    // Try to extract ward information from address
-    const wardMatch = address.match(/Ward[- ]?(\d+)/i);
-    if (wardMatch) return `Ward ${wardMatch[1]}`;
-    
-    const sectorMatch = address.match(/Sector[- ]?(\d+)/i);
-    if (sectorMatch) return `Sector ${sectorMatch[1]}`;
-    
-    const blockMatch = address.match(/Block[- ]?([A-Z0-9]+)/i);
-    if (blockMatch) return `Block ${blockMatch[1]}`;
-    
-    return user.ward || 'Ward 12'; // Default to admin's ward
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchReports(),
+      fetchWorkers(),
+      fetchEcoProducts(),
+      fetchNotifications(),
+      calculateAnalytics()
+    ]);
   };
 
-  const fetchRegionalReports = async () => {
+  const fetchReports = async () => {
     setLoadingReports(true);
     try {
-      // First fetch reports
+      // Fetch all reports (admin can see all)
       const { data: reportsData, error: reportsError } = await supabase
         .from('reports')
         .select('*')
@@ -122,36 +189,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         return;
       }
 
-      // Then fetch user profiles for the reports
+      // Fetch reporter profiles
       const userIds = reportsData?.map(report => report.user_id).filter(Boolean) || [];
+      let reporterProfilesData: ReporterProfile[] = [];
       
-      let profilesData: ReporterProfile[] = [];
       if (userIds.length > 0) {
         const { data: profiles, error: profilesError } = await supabase
           .from('profiles')
-          .select('id, name, phone')
+          .select('id, name, phone, eco_points')
           .in('id', userIds);
 
         if (profilesError) {
-          console.error('Error fetching profiles:', profilesError);
+          console.error('Error fetching reporter profiles:', profilesError);
         } else {
-          profilesData = profiles || [];
+          reporterProfilesData = profiles || [];
         }
       }
 
-      // Create a map of user_id to profile for quick lookup
-      const profileMap = new Map(profilesData.map(profile => [profile.id, profile]));
-      setReporterProfiles(profileMap);
+      const reporterProfileMap = new Map(reporterProfilesData.map(profile => [profile.id, profile]));
+      setReporterProfiles(reporterProfileMap);
 
-      // Convert database reports to complaint format
-      const convertedComplaints: Complaint[] = (reportsData || []).map((report: DatabaseReport) => {
-        const reporterProfile = profileMap.get(report.user_id);
-        const assignedWorker = workers.find(w => w.id === report.assigned_to);
-        
-        // Validate and fix eco points if needed
-        const validatedPoints = report.eco_points && report.priority_level 
-          ? validateAndFixEcoPoints(report.priority_level, report.eco_points)
-          : report.eco_points;
+      // Convert to complaint format
+      const convertedReports: Complaint[] = (reportsData || []).map((report: DatabaseReport) => {
+        const reporterProfile = reporterProfileMap.get(report.user_id);
+        const workerProfile = report.assigned_to ? workerProfiles.get(report.assigned_to) : null;
         
         return {
           id: report.id,
@@ -171,31 +232,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           priority: (report.priority_level as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
           submittedAt: new Date(report.created_at),
           assignedTo: report.assigned_to,
-          assignedWorkerName: assignedWorker?.name,
+          assignedWorkerName: workerProfile?.name,
+          ecoPoints: report.eco_points,
           proofImage: report.proof_image,
           proofLocation: report.proof_lat && report.proof_lng ? {
             lat: report.proof_lat,
             lng: report.proof_lng,
             address: 'Proof location'
           } : undefined,
-          ecoPoints: validatedPoints,
-          ward: extractWardFromAddress(report.address)
+          rejectionComment: report.rejection_comment,
+          aiAnalysis: report.ai_analysis
         };
       });
 
-      // Filter reports by admin's region if ward/city is specified
-      let filteredComplaints = convertedComplaints;
-      if (user.ward || user.city) {
-        filteredComplaints = convertedComplaints.filter(complaint => {
-          const address = complaint.location.address?.toLowerCase() || '';
-          const ward = user.ward?.toLowerCase() || '';
-          const city = user.city?.toLowerCase() || '';
-          
-          return address.includes(ward) || address.includes(city);
-        });
-      }
-
-      setComplaints(filteredComplaints);
+      setReports(convertedReports);
     } catch (error) {
       console.error('Error fetching reports:', error);
     } finally {
@@ -203,30 +253,33 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
-  const fetchAvailableWorkers = async () => {
+  const fetchWorkers = async () => {
     setLoadingWorkers(true);
     try {
-      const { data: workersData, error: workersError } = await supabase
+      const { data: workersData, error } = await supabase
         .from('profiles')
-        .select('id, name, phone, status, assigned_ward, task_completion_count, current_task_id')
+        .select('*')
         .eq('role', 'subworker')
-        .order('task_completion_count', { ascending: true });
+        .order('name');
 
-      if (workersError) {
-        console.error('Error fetching workers:', workersError);
+      if (error) {
+        console.error('Error fetching workers:', error);
         return;
       }
 
-      const convertedWorkers: SubWorker[] = (workersData || []).map((worker: WorkerProfile) => ({
+      const workerProfileMap = new Map(workersData?.map(worker => [worker.id, worker]) || []);
+      setWorkerProfiles(workerProfileMap);
+
+      const convertedWorkers: SubWorker[] = (workersData || []).map(worker => ({
         id: worker.id,
         name: worker.name,
-        email: '', // Not needed for display
+        email: worker.email || '',
         phone: worker.phone || '',
-        status: worker.status as 'available' | 'busy',
-        ward: worker.assigned_ward || 'Ward 12',
+        status: (worker.status as 'available' | 'busy') || 'available',
+        ward: worker.assigned_ward || worker.ward || 'Unassigned',
         completedTasks: worker.task_completion_count || 0,
-        rating: 4.5 + Math.random() * 0.5, // Mock rating for now
-        currentTask: worker.status === 'busy' ? 'active-task' : undefined
+        rating: 4.5, // Mock rating - could be calculated from feedback
+        currentTask: worker.current_task_id
       }));
 
       setWorkers(convertedWorkers);
@@ -237,123 +290,186 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
     }
   };
 
-  const getAvailableWorkersForWard = (reportWard: string) => {
-    return workers.filter(worker => 
-      worker.status === 'available' && 
-      (worker.ward === reportWard || worker.ward === user.ward || !worker.ward)
-    );
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'submitted': return 'bg-yellow-100 text-yellow-800';
-      case 'assigned': return 'bg-blue-100 text-blue-800';
-      case 'in-progress': return 'bg-orange-100 text-orange-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'submitted_for_approval': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'low': return 'bg-green-100 text-green-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'urgent': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const openAssignmentModal = (complaintId: string, complaintTitle: string, complaintWard: string, workerId: string) => {
-    const worker = workers.find(w => w.id === workerId);
-    if (!worker) return;
-
-    setAssignmentModal({
-      isOpen: true,
-      reportId: complaintId,
-      reportTitle: complaintTitle,
-      reportWard: complaintWard,
-      workerId: workerId,
-      workerName: worker.name
-    });
-  };
-
-  const confirmAssignment = async () => {
+  const fetchEcoProducts = async () => {
+    setLoadingProducts(true);
     try {
-      // Use the database function to assign task
-      const { data, error } = await supabase.rpc('assign_task_to_worker', {
-        task_id: assignmentModal.reportId,
-        worker_id: assignmentModal.workerId
-      });
+      const { data, error } = await supabase
+        .from('eco_store_items')
+        .select('*')
+        .order('point_cost');
 
-      if (error || !data) {
-        console.error('Error assigning worker:', error);
-        alert('Failed to assign worker. Worker may not be available.');
+      if (error) {
+        console.error('Error fetching eco products:', error);
         return;
       }
 
-      // Update local state
-      setComplaints(prev => prev.map(complaint =>
-        complaint.id === assignmentModal.reportId
-          ? { 
-              ...complaint, 
-              status: 'assigned', 
-              assignedTo: assignmentModal.workerId, 
-              assignedWorkerName: assignmentModal.workerName 
-            }
-          : complaint
-      ));
+      const convertedProducts: EcoProduct[] = (data || []).map(item => ({
+        id: item.id,
+        name: item.name,
+        description: item.description || '',
+        eco_points: item.point_cost,
+        image: item.image_url,
+        category: item.category as 'dustbins' | 'compost' | 'tools' | 'plants',
+        stock: item.quantity
+      }));
 
-      setWorkers(prev => prev.map(w =>
-        w.id === assignmentModal.workerId
-          ? { ...w, status: 'busy', currentTask: assignmentModal.reportId }
-          : w
-      ));
-
-      setAssignmentModal({ isOpen: false, reportId: '', reportTitle: '', reportWard: '', workerId: '', workerName: '' });
-      alert(`Task assigned to ${assignmentModal.workerName} successfully!`);
+      setEcoProducts(convertedProducts);
     } catch (error) {
-      console.error('Error assigning worker:', error);
-      alert('Failed to assign worker. Please try again.');
+      console.error('Error fetching eco products:', error);
+    } finally {
+      setLoadingProducts(false);
     }
   };
 
-  const openDetailModal = (complaint: Complaint) => {
-    setDetailModal({ isOpen: true, report: complaint });
-    setCurrentImageIndex(0);
+  const fetchNotifications = async () => {
+    try {
+      const notifications = await getUserNotifications(user.id);
+      setNotifications(notifications);
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
   };
 
-  const openApprovalModal = (complaint: Complaint) => {
-    setApprovalModal({ isOpen: true, report: complaint });
-    setRejectionComment('');
+  const calculateAnalytics = async () => {
+    try {
+      // Get basic counts
+      const { data: allReports } = await supabase
+        .from('reports')
+        .select('status, created_at, priority_level');
+
+      const { data: allWorkers } = await supabase
+        .from('profiles')
+        .select('status')
+        .eq('role', 'subworker');
+
+      if (!allReports || !allWorkers) return;
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      const todayReports = allReports.filter(r => new Date(r.created_at) >= today).length;
+      const weekReports = allReports.filter(r => new Date(r.created_at) >= weekAgo).length;
+      const prevWeekReports = allReports.filter(r => {
+        const date = new Date(r.created_at);
+        return date >= new Date(weekAgo.getTime() - 7 * 24 * 60 * 60 * 1000) && date < weekAgo;
+      }).length;
+
+      const weeklyTrend = prevWeekReports > 0 ? ((weekReports - prevWeekReports) / prevWeekReports) * 100 : 0;
+
+      const analytics: Analytics = {
+        totalReports: allReports.length,
+        pendingReports: allReports.filter(r => ['submitted', 'assigned', 'submitted_for_approval'].includes(r.status)).length,
+        completedReports: allReports.filter(r => r.status === 'completed').length,
+        activeWorkers: allWorkers.filter(w => w.status === 'available').length,
+        averageResolutionTime: 4.2, // Mock - would need to calculate from actual data
+        cleanlinessIndex: 87.3, // Mock - would be calculated based on completion rates
+        todayReports,
+        weeklyTrend
+      };
+
+      setAnalytics(analytics);
+    } catch (error) {
+      console.error('Error calculating analytics:', error);
+    }
+  };
+
+  const assignTaskToWorker = async (reportId: string, workerId: string) => {
+    setAssigningTask(true);
+    try {
+      // Update report with assigned worker
+      const { error: reportError } = await supabase
+        .from('reports')
+        .update({
+          status: 'assigned',
+          assigned_to: workerId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', reportId);
+
+      if (reportError) {
+        console.error('Error assigning task:', reportError);
+        alert('Failed to assign task. Please try again.');
+        return;
+      }
+
+      // Update worker status to busy
+      const { error: workerError } = await supabase
+        .from('profiles')
+        .update({
+          status: 'busy',
+          current_task_id: reportId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', workerId);
+
+      if (workerError) {
+        console.error('Error updating worker status:', workerError);
+      }
+
+      // Create notification for worker
+      const report = reports.find(r => r.id === reportId);
+      if (report) {
+        const template = NotificationTemplates.taskAssigned(reportId, report.location.address);
+        await createNotification(workerId, template.title, template.message, template.type, reportId);
+      }
+
+      // Refresh data
+      await fetchAllData();
+      setAssignTaskModal({ isOpen: false, report: null });
+      alert('Task assigned successfully!');
+
+    } catch (error) {
+      console.error('Error assigning task:', error);
+      alert('Failed to assign task. Please try again.');
+    } finally {
+      setAssigningTask(false);
+    }
   };
 
   const approveTask = async (reportId: string) => {
+    setReviewingProof(true);
     try {
-      const report = complaints.find(c => c.id === reportId);
-      if (!report?.assignedTo) {
-        alert('No worker assigned to this task.');
+      const report = reports.find(r => r.id === reportId);
+      if (!report) return;
+
+      // Update report status to completed
+      const { error: reportError } = await supabase
+        .from('reports')
+        .update({
+          status: 'completed',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', reportId);
+
+      if (reportError) {
+        console.error('Error approving task:', reportError);
+        alert('Failed to approve task. Please try again.');
         return;
       }
 
-      // Use the database function to complete task
-      const { data, error } = await supabase.rpc('complete_task_and_update_worker', {
-        task_id: reportId,
-        worker_id: report.assignedTo
-      });
+      // Update worker status back to available
+      if (report.assignedTo) {
+        const { error: workerError } = await supabase
+          .from('profiles')
+          .update({
+            status: 'available',
+            current_task_id: null,
+            task_completion_count: supabase.sql`task_completion_count + 1`,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', report.assignedTo);
 
-      if (error || !data) {
-        console.error('Error completing task:', error);
-        alert('Failed to complete task. Please try again.');
-        return;
+        if (workerError) {
+          console.error('Error updating worker status:', workerError);
+        }
       }
 
-      // Award eco points to the reporter
-      if (report.ecoPoints && report.userId) {
+      // Award eco-points to citizen
+      if (report.ecoPoints) {
         const { error: pointsError } = await supabase
           .from('profiles')
-          .update({ 
+          .update({
             eco_points: supabase.sql`eco_points + ${report.ecoPoints}`,
             updated_at: new Date().toISOString()
           })
@@ -362,136 +478,392 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         if (pointsError) {
           console.error('Error awarding points:', pointsError);
         }
+
+        // Create reward transaction
+        await supabase
+          .from('reward_transactions')
+          .insert([{
+            user_id: report.userId,
+            report_id: reportId,
+            points: report.ecoPoints
+          }]);
+
+        // Notify citizen about points
+        const template = NotificationTemplates.taskApproved(report.ecoPoints);
+        await createNotification(report.userId, template.title, template.message, template.type, reportId);
       }
 
-      // Update local state
-      setComplaints(prev => prev.map(complaint =>
-        complaint.id === reportId
-          ? { ...complaint, status: 'completed' }
-          : complaint
-      ));
+      // Notify worker about approval
+      if (report.assignedTo) {
+        await createNotification(
+          report.assignedTo,
+          'Task Approved!',
+          'Your cleanup work has been approved. Great job!',
+          'success',
+          reportId
+        );
+      }
 
-      setWorkers(prev => prev.map(w =>
-        w.id === report.assignedTo
-          ? { ...w, status: 'available', currentTask: undefined, completedTasks: w.completedTasks + 1 }
-          : w
-      ));
+      // Refresh data
+      await fetchAllData();
+      setProofReviewModal({ isOpen: false, report: null });
+      alert('Task approved successfully! Eco-points awarded to citizen.');
 
-      setApprovalModal({ isOpen: false, report: null });
-      alert(`Task approved successfully! ${report.ecoPoints || 0} eco-points awarded to reporter.`);
     } catch (error) {
       console.error('Error approving task:', error);
       alert('Failed to approve task. Please try again.');
+    } finally {
+      setReviewingProof(false);
     }
   };
 
   const rejectTask = async (reportId: string, comment: string) => {
+    if (!comment.trim()) {
+      alert('Please provide a reason for rejection.');
+      return;
+    }
+
+    setReviewingProof(true);
     try {
-      const { error } = await supabase
+      // Update report with rejection comment and reset to assigned status
+      const { error: reportError } = await supabase
         .from('reports')
-        .update({ 
+        .update({
           status: 'assigned',
+          rejection_comment: comment,
           proof_image: null,
           proof_lat: null,
           proof_lng: null,
-          rejection_comment: comment
+          updated_at: new Date().toISOString()
         })
         .eq('id', reportId);
 
-      if (error) {
-        console.error('Error rejecting task:', error);
+      if (reportError) {
+        console.error('Error rejecting task:', reportError);
         alert('Failed to reject task. Please try again.');
         return;
       }
 
-      // Update local state
-      setComplaints(prev => prev.map(complaint =>
-        complaint.id === reportId
-          ? { 
-              ...complaint, 
-              status: 'assigned',
-              proofImage: undefined,
-              proofLocation: undefined
-            }
-          : complaint
-      ));
+      const report = reports.find(r => r.id === reportId);
+      
+      // Notify worker about rejection
+      if (report?.assignedTo) {
+        const template = NotificationTemplates.taskRejected(comment);
+        await createNotification(report.assignedTo, template.title, template.message, template.type, reportId);
+      }
 
-      setApprovalModal({ isOpen: false, report: null });
-      alert(`Task rejected. Sub-worker has been notified to retry. Comment: ${comment}`);
+      // Refresh data
+      await fetchAllData();
+      setProofReviewModal({ isOpen: false, report: null });
+      setRejectionComment('');
+      alert('Task rejected. Worker has been notified to resubmit.');
+
     } catch (error) {
       console.error('Error rejecting task:', error);
       alert('Failed to reject task. Please try again.');
+    } finally {
+      setReviewingProof(false);
     }
   };
 
-  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number) => {
-    const R = 6371e3; // Earth's radius in meters
-    const φ1 = lat1 * Math.PI/180;
-    const φ2 = lat2 * Math.PI/180;
-    const Δφ = (lat2-lat1) * Math.PI/180;
-    const Δλ = (lng2-lng1) * Math.PI/180;
+  const saveEcoProduct = async () => {
+    if (!productForm.name.trim() || !productForm.description.trim() || !productForm.image_url.trim()) {
+      alert('Please fill all required fields.');
+      return;
+    }
 
-    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ/2) * Math.sin(Δλ/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    setSavingProduct(true);
+    try {
+      if (ecoStoreModal.product) {
+        // Update existing product
+        const { error } = await supabase
+          .from('eco_store_items')
+          .update({
+            name: productForm.name,
+            description: productForm.description,
+            point_cost: productForm.point_cost,
+            quantity: productForm.quantity,
+            image_url: productForm.image_url,
+            category: productForm.category,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', ecoStoreModal.product.id);
 
-    return R * c; // Distance in meters
+        if (error) {
+          console.error('Error updating product:', error);
+          alert('Failed to update product. Please try again.');
+          return;
+        }
+      } else {
+        // Create new product
+        const { error } = await supabase
+          .from('eco_store_items')
+          .insert([{
+            name: productForm.name,
+            description: productForm.description,
+            point_cost: productForm.point_cost,
+            quantity: productForm.quantity,
+            image_url: productForm.image_url,
+            category: productForm.category,
+            is_active: true
+          }]);
+
+        if (error) {
+          console.error('Error creating product:', error);
+          alert('Failed to create product. Please try again.');
+          return;
+        }
+      }
+
+      // Refresh products
+      await fetchEcoProducts();
+      setEcoStoreModal({ isOpen: false, product: null, isEditing: false });
+      setProductForm({
+        name: '',
+        description: '',
+        point_cost: 0,
+        quantity: 0,
+        image_url: '',
+        category: 'tools'
+      });
+      alert('Product saved successfully!');
+
+    } catch (error) {
+      console.error('Error saving product:', error);
+      alert('Failed to save product. Please try again.');
+    } finally {
+      setSavingProduct(false);
+    }
   };
 
-  const pendingComplaints = complaints.filter(c => c.status === 'submitted');
-  const completedComplaints = complaints.filter(c => c.status === 'completed');
-  const availableWorkers = workers.filter(w => w.status === 'available');
-  const approvalRequests = complaints.filter(c => c.status === 'submitted_for_approval');
+  const deleteEcoProduct = async (productId: string) => {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('eco_store_items')
+        .delete()
+        .eq('id', productId);
+
+      if (error) {
+        console.error('Error deleting product:', error);
+        alert('Failed to delete product. Please try again.');
+        return;
+      }
+
+      await fetchEcoProducts();
+      alert('Product deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('Failed to delete product. Please try again.');
+    }
+  };
+
+  const openProductModal = (product?: EcoProduct) => {
+    if (product) {
+      setProductForm({
+        name: product.name,
+        description: product.description,
+        point_cost: product.eco_points,
+        quantity: product.stock,
+        image_url: product.image,
+        category: product.category
+      });
+      setEcoStoreModal({ isOpen: true, product, isEditing: true });
+    } else {
+      setProductForm({
+        name: '',
+        description: '',
+        point_cost: 0,
+        quantity: 0,
+        image_url: '',
+        category: 'tools'
+      });
+      setEcoStoreModal({ isOpen: true, product: null, isEditing: false });
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'submitted': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'assigned': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'in-progress': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+      case 'submitted_for_approval': return 'bg-purple-100 text-purple-800 border-purple-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'low': return 'bg-green-100 text-green-800 border-green-200';
+      case 'medium': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'high': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'urgent': return 'bg-red-100 text-red-800 border-red-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getWorkerStatusColor = (status: string) => {
+    switch (status) {
+      case 'available': return 'bg-green-100 text-green-800';
+      case 'busy': return 'bg-red-100 text-red-800';
+      case 'offline': return 'bg-gray-100 text-gray-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Filter reports based on current filters
+  const filteredReports = reports.filter(report => {
+    const matchesStatus = statusFilter === 'all' || report.status === statusFilter;
+    const matchesPriority = priorityFilter === 'all' || report.priority === priorityFilter;
+    const matchesSearch = searchTerm === '' || 
+      report.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      report.location.address.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesStatus && matchesPriority && matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+      <div className="bg-white shadow-lg border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
+            {/* Logo Section */}
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-lg flex items-center justify-center mr-3">
-                <span className="text-white font-bold text-sm">N</span>
+              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center mr-3 shadow-lg">
+                <Shield className="text-white" size={20} />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-800">Niramay Admin</h1>
-                <p className="text-sm text-gray-600">{user.ward}, {user.city}</p>
+                <p className="text-xs text-gray-500">Municipal Management Portal</p>
               </div>
             </div>
-            <button
-              onClick={onLogout}
-              className="text-gray-600 hover:text-gray-800 font-medium"
-            >
-              Logout
-            </button>
+
+            {/* User Section */}
+            <div className="flex items-center space-x-4">
+              {/* Quick Stats */}
+              <div className="hidden lg:flex items-center space-x-4">
+                <div className="bg-yellow-50 border border-yellow-200 px-3 py-1 rounded-lg">
+                  <span className="text-yellow-800 text-sm font-medium">
+                    {analytics?.pendingReports || 0} Pending
+                  </span>
+                </div>
+                <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-lg">
+                  <span className="text-green-800 text-sm font-medium">
+                    {analytics?.activeWorkers || 0} Workers
+                  </span>
+                </div>
+              </div>
+
+              {/* Notifications */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="relative p-2 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+                >
+                  <Bell size={20} className="text-gray-600" />
+                  {unreadNotifications.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadNotifications.length}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-100 z-50 max-h-96 overflow-y-auto">
+                    <div className="p-4 border-b border-gray-100">
+                      <h3 className="font-semibold text-gray-800">Notifications</h3>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">
+                          No notifications yet
+                        </div>
+                      ) : (
+                        notifications.slice(0, 10).map(notification => (
+                          <div
+                            key={notification.id}
+                            className={`p-3 border-b border-gray-50 ${
+                              !notification.is_read ? 'bg-blue-50' : ''
+                            }`}
+                          >
+                            <h4 className="font-medium text-gray-800 text-sm">
+                              {notification.title}
+                            </h4>
+                            <p className="text-gray-600 text-xs mt-1">
+                              {notification.message}
+                            </p>
+                            <p className="text-gray-400 text-xs mt-1">
+                              {new Date(notification.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* User Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+                  className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl transition-colors"
+                >
+                  <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-lg flex items-center justify-center">
+                    <Shield size={16} className="text-white" />
+                  </div>
+                  <span className="hidden sm:block font-medium text-gray-700">{user.name?.split(' ')[0] || 'Admin'}</span>
+                  <ChevronDown size={16} className="text-gray-500" />
+                </button>
+
+                {showUserDropdown && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 z-50">
+                    <div className="p-3 border-b border-gray-100">
+                      <p className="font-semibold text-gray-800">{user.name}</p>
+                      <p className="text-sm text-gray-500">Municipal Admin</p>
+                    </div>
+                    <div className="p-2">
+                      <button
+                        onClick={onLogout}
+                        className="w-full text-left px-3 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Navigation Tabs */}
-        <div className="flex space-x-1 bg-gray-100 p-1 rounded-xl mb-8">
+        <div className="flex space-x-1 bg-white p-1 rounded-2xl mb-8 shadow-lg border border-gray-100">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-            { id: 'complaints', label: 'Complaints', icon: AlertTriangle },
-            { id: 'approvals', label: `Approvals ${approvalRequests.length > 0 ? `(${approvalRequests.length})` : ''}`, icon: CheckCircle },
+            { id: 'reports', label: `Reports ${filteredReports.length > 0 ? `(${filteredReports.length})` : ''}`, icon: Clock },
             { id: 'workers', label: 'Workers', icon: Users },
-            { id: 'analytics', label: 'Analytics', icon: BarChart3 }
+            { id: 'analytics', label: 'Analytics', icon: TrendingUp },
+            { id: 'ecostore', label: 'Eco Store', icon: Package }
           ].map(tab => {
             const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center px-4 py-2 rounded-lg font-medium transition-all ${
+                onClick={() => setActiveTab(tab.id as 'dashboard' | 'reports' | 'workers' | 'analytics' | 'ecostore')}
+                className={`flex items-center px-4 py-3 rounded-xl font-semibold transition-all ${
                   activeTab === tab.id
-                    ? 'bg-white text-blue-600 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800'
+                    ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg transform scale-105'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
                 }`}
               >
                 <Icon size={18} className="mr-2" />
-                {tab.label}
+                <span className="hidden sm:inline">{tab.label}</span>
               </button>
             );
           })}
@@ -500,140 +872,199 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {/* Dashboard Overview */}
         {activeTab === 'dashboard' && (
           <div className="space-y-8">
+            {/* Welcome Section */}
+            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-3xl p-8 text-white shadow-2xl">
+              <div className="flex flex-col md:flex-row items-center justify-between">
+                <div className="mb-6 md:mb-0">
+                  <h2 className="text-3xl font-bold mb-2">
+                    Welcome, {user.name?.split(' ')[0] || 'Admin'}!
+                  </h2>
+                  <p className="text-blue-100 text-lg">
+                    Managing waste reports and coordinating cleanup efforts
+                  </p>
+                  <div className="flex items-center mt-4 space-x-6">
+                    <div className="flex items-center">
+                      <Activity size={20} className="mr-2" />
+                      <span className="font-semibold">{analytics?.todayReports || 0} Today</span>
+                    </div>
+                    <div className="flex items-center">
+                      <Target size={20} className="mr-2" />
+                      <span className="font-semibold">{analytics?.cleanlinessIndex || 0}% Clean Index</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={() => fetchAllData()}
+                  className="bg-white text-blue-600 px-8 py-4 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all duration-300 flex items-center"
+                >
+                  <RefreshCw size={24} className="mr-3" />
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Total Complaints</p>
-                    <p className="text-2xl font-bold text-gray-900">{complaints.length}</p>
+                    <p className="text-sm font-medium text-gray-600">Total Reports</p>
+                    <p className="text-3xl font-bold text-gray-900">{analytics?.totalReports || 0}</p>
+                    <div className="flex items-center mt-2">
+                      {analytics?.weeklyTrend && analytics.weeklyTrend > 0 ? (
+                        <TrendingUp size={16} className="text-green-600 mr-1" />
+                      ) : (
+                        <TrendingDown size={16} className="text-red-600 mr-1" />
+                      )}
+                      <span className={`text-sm font-medium ${
+                        analytics?.weeklyTrend && analytics.weeklyTrend > 0 ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {Math.abs(analytics?.weeklyTrend || 0).toFixed(1)}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                    <AlertTriangle className="text-blue-600" size={24} />
+                  <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center">
+                    <Clock className="text-blue-600" size={28} />
                   </div>
                 </div>
               </div>
               
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Pending</p>
-                    <p className="text-2xl font-bold text-gray-900">{pendingComplaints.length}</p>
+                    <p className="text-3xl font-bold text-gray-900">{analytics?.pendingReports || 0}</p>
+                    <p className="text-sm text-orange-600 mt-2">Needs attention</p>
                   </div>
-                  <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                    <Clock className="text-yellow-600" size={24} />
+                  <div className="w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center">
+                    <AlertTriangle className="text-orange-600" size={28} />
                   </div>
                 </div>
               </div>
               
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">Completed</p>
-                    <p className="text-2xl font-bold text-gray-900">{completedComplaints.length}</p>
+                    <p className="text-3xl font-bold text-gray-900">{analytics?.completedReports || 0}</p>
+                    <p className="text-sm text-green-600 mt-2">Successfully resolved</p>
                   </div>
-                  <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                    <CheckCircle className="text-green-600" size={24} />
+                  <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center">
+                    <CheckCircle className="text-green-600" size={28} />
                   </div>
                 </div>
               </div>
               
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-gray-600">Available Workers</p>
-                    <p className="text-2xl font-bold text-gray-900">{availableWorkers.length}</p>
+                    <p className="text-sm font-medium text-gray-600">Active Workers</p>
+                    <p className="text-3xl font-bold text-gray-900">{analytics?.activeWorkers || 0}</p>
+                    <p className="text-sm text-blue-600 mt-2">Available now</p>
                   </div>
-                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                    <UserCheck className="text-purple-600" size={24} />
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">Pending Approvals</p>
-                    <p className="text-2xl font-bold text-gray-900">{approvalRequests.length}</p>
-                  </div>
-                  <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                    <Eye className="text-orange-600" size={24} />
+                  <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center">
+                    <Users className="text-purple-600" size={28} />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Recent Complaints</h3>
+            {/* Recent Reports & Quick Actions */}
+            <div className="grid lg:grid-cols-2 gap-8">
+              {/* Recent Reports */}
+              <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-2xl font-bold text-gray-800">Recent Reports</h3>
+                  <button
+                    onClick={() => setActiveTab('reports')}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    View All
+                  </button>
+                </div>
+                
                 {loadingReports ? (
-                  <div className="flex justify-center items-center py-8">
-                    <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="ml-3 text-gray-600">Loading reports...</span>
+                  <div className="flex justify-center items-center py-12">
+                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : reports.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Clock size={48} className="text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No reports yet</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {complaints.slice(0, 5).map(complaint => (
-                      <div key={complaint.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-xl">
+                    {reports.slice(0, 3).map(report => (
+                      <div key={report.id} className="flex items-center space-x-4 p-4 bg-gradient-to-r from-gray-50 to-white rounded-2xl border border-gray-100 hover:shadow-lg transition-shadow cursor-pointer"
+                           onClick={() => setReportDetailModal({ isOpen: true, report })}>
                         <img
-                          src={complaint.imageUrl}
-                          alt="Complaint"
-                          className="w-12 h-12 rounded-lg object-cover cursor-pointer"
-                          onClick={() => openDetailModal(complaint)}
+                          src={report.imageUrl}
+                          alt="Report"
+                          className="w-16 h-16 rounded-xl object-cover shadow-md"
                         />
                         <div className="flex-1">
-                          <h4 className="font-medium text-gray-800">{complaint.title}</h4>
-                          <p className="text-sm text-gray-600">{complaint.userName}</p>
-                          <p className="text-xs text-gray-500">{complaint.userPhone}</p>
-                          <div className="flex items-center mt-1">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
-                              {complaint.priority}
+                          <h4 className="font-bold text-gray-800 mb-1">{report.userName}</h4>
+                          <p className="text-sm text-gray-600 mb-2">{report.location.address}</p>
+                          <div className="flex items-center space-x-2">
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(report.status)}`}>
+                              {report.status.replace('_', ' ')}
                             </span>
-                            {complaint.ecoPoints && (
-                              <span className="ml-2 text-xs text-green-600 font-medium">
-                                {complaint.ecoPoints} pts
-                              </span>
-                            )}
+                            <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getPriorityColor(report.priority)}`}>
+                              {report.priority}
+                            </span>
                           </div>
                         </div>
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
-                          {complaint.status}
-                        </span>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-500">
+                            {report.submittedAt.toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4">Worker Status</h3>
+              {/* Worker Status */}
+              <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-2xl font-bold text-gray-800">Worker Status</h3>
+                  <button
+                    onClick={() => setActiveTab('workers')}
+                    className="text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Manage All
+                  </button>
+                </div>
+                
                 {loadingWorkers ? (
-                  <div className="flex justify-center items-center py-8">
-                    <div className="w-6 h-6 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="ml-3 text-gray-600">Loading workers...</span>
+                  <div className="flex justify-center items-center py-12">
+                    <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  </div>
+                ) : workers.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Users size={48} className="text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500">No workers registered</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {workers.map(worker => (
-                      <div key={worker.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                        <div>
-                          <h4 className="font-medium text-gray-800">{worker.name}</h4>
-                          <p className="text-sm text-gray-600">{worker.completedTasks} tasks completed</p>
-                          <p className="text-xs text-gray-500">{worker.ward}</p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="flex items-center">
-                            <Star size={14} className="text-yellow-500 mr-1" />
-                            <span className="text-sm font-medium">{worker.rating.toFixed(1)}</span>
+                    {workers.slice(0, 4).map(worker => (
+                      <div key={worker.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-white rounded-2xl border border-gray-100">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center">
+                            <User size={16} className="text-white" />
                           </div>
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            worker.status === 'available' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
+                          <div>
+                            <h4 className="font-semibold text-gray-800">{worker.name}</h4>
+                            <p className="text-sm text-gray-600">{worker.ward}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getWorkerStatusColor(worker.status)}`}>
                             {worker.status}
                           </span>
+                          <p className="text-xs text-gray-500 mt-1">{worker.completedTasks} tasks</p>
                         </div>
                       </div>
                     ))}
@@ -644,235 +1075,179 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           </div>
         )}
 
-        {/* Complaints Management */}
-        {activeTab === 'complaints' && (
+        {/* Reports Management */}
+        {activeTab === 'reports' && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-800">Complaint Management</h2>
-              <div className="text-sm text-gray-600">
-                Showing reports for {user.ward}, {user.city}
+            {/* Filters */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="relative">
+                    <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search reports..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="submitted">Submitted</option>
+                    <option value="assigned">Assigned</option>
+                    <option value="submitted_for_approval">Pending Approval</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                  
+                  <select
+                    value={priorityFilter}
+                    onChange={(e) => setPriorityFilter(e.target.value)}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="all">All Priority</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <Filter size={20} className="text-gray-400" />
+                  <span className="text-sm text-gray-600">{filteredReports.length} reports</span>
+                </div>
               </div>
             </div>
-            
+
+            {/* Reports List */}
             {loadingReports ? (
               <div className="flex justify-center items-center py-12">
                 <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <span className="ml-3 text-gray-600">Loading reports...</span>
               </div>
-            ) : complaints.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 shadow-lg border border-gray-100 text-center">
-                <AlertTriangle size={64} className="text-gray-400 mx-auto mb-6" />
+            ) : filteredReports.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
+                <Clock size={64} className="text-gray-400 mx-auto mb-6" />
                 <h3 className="text-2xl font-bold text-gray-600 mb-4">No reports found</h3>
-                <p className="text-gray-500">No waste reports have been submitted in your region yet.</p>
+                <p className="text-gray-500">No reports match your current filters.</p>
               </div>
             ) : (
               <div className="grid gap-6">
-                {complaints.map(complaint => {
-                  const reportWard = extractWardFromAddress(complaint.location.address);
-                  const availableWorkersForReport = getAvailableWorkersForWard(reportWard);
-                  
-                  return (
-                    <div key={complaint.id} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                      <div className="flex flex-col lg:flex-row gap-6">
+                {filteredReports.map(report => (
+                  <div key={report.id} className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+                    <div className="flex flex-col lg:flex-row gap-6">
+                      <div className="relative">
                         <img
-                          src={complaint.imageUrl}
-                          alt="Complaint"
-                          className="w-full lg:w-64 h-48 object-cover rounded-xl cursor-pointer hover:opacity-80 transition-opacity"
-                          onClick={() => openDetailModal(complaint)}
+                          src={report.imageUrl}
+                          alt="Report"
+                          className="w-full lg:w-64 h-48 object-cover rounded-2xl shadow-lg cursor-pointer"
+                          onClick={() => setReportDetailModal({ isOpen: true, report })}
                         />
-                        
-                        <div className="flex-1 space-y-4">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="text-xl font-semibold text-gray-800">{complaint.title}</h3>
-                              <div className="space-y-1">
-                                <p className="text-gray-600">Reported by: <span className="font-medium">{complaint.userName}</span></p>
-                                <p className="text-gray-600">Contact: <span className="font-medium">{complaint.userPhone}</span></p>
-                                <p className="text-gray-600">Ward: <span className="font-medium">{reportWard}</span></p>
-                              </div>
-                            </div>
-                            <div className="flex space-x-2">
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(complaint.status)}`}>
-                                {complaint.status.replace('_', ' ')}
-                              </span>
-                              <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(complaint.priority)}`}>
-                                {complaint.priority}
-                              </span>
-                              {complaint.ecoPoints && (
-                                <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  {complaint.ecoPoints} pts
-                                </span>
-                              )}
-                            </div>
+                        {report.images && report.images.length > 1 && (
+                          <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded-lg text-xs">
+                            +{report.images.length - 1} more
                           </div>
-                          
-                          <p className="text-gray-600">{complaint.description}</p>
-                          
-                          <div className="flex items-center text-sm text-gray-500">
-                            <MapPin size={16} className="mr-2" />
-                            {complaint.location.address}
-                          </div>
-                          
-                          <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">
-                              Submitted: {complaint.submittedAt.toLocaleDateString()}
-                            </span>
-                            
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => openDetailModal(complaint)}
-                                className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200 transition-colors"
-                              >
-                                View Details
-                              </button>
-                              
-                              {complaint.status === 'submitted' && availableWorkersForReport.length > 0 && (
-                                <select
-                                  onChange={(e) => e.target.value && openAssignmentModal(complaint.id, complaint.title, reportWard, e.target.value)}
-                                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                  defaultValue=""
-                                >
-                                  <option value="">Assign Worker ({availableWorkersForReport.length} available)</option>
-                                  {availableWorkersForReport.map(worker => (
-                                    <option key={worker.id} value={worker.id}>
-                                      {worker.name} - {worker.ward} (Tasks: {worker.completedTasks})
-                                    </option>
-                                  ))}
-                                </select>
-                              )}
-
-                              {complaint.status === 'submitted' && availableWorkersForReport.length === 0 && (
-                                <div className="text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
-                                  No workers available in {reportWard}
-                                </div>
-                              )}
-                              
-                              {complaint.assignedWorkerName && (
-                                <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded-lg">
-                                  Assigned to: {complaint.assignedWorkerName}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                        )}
+                        {/* Priority indicator */}
+                        <div className={`absolute top-2 left-2 px-2 py-1 rounded-lg text-xs font-medium ${getPriorityColor(report.priority)}`}>
+                          {report.priority.toUpperCase()}
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Approvals Tab */}
-        {activeTab === 'approvals' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-800">Task Approvals</h2>
-              <div className="text-sm text-gray-600">
-                {approvalRequests.length} pending approvals
-              </div>
-            </div>
-            
-            {approvalRequests.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 shadow-lg border border-gray-100 text-center">
-                <CheckCircle size={64} className="text-gray-400 mx-auto mb-6" />
-                <h3 className="text-2xl font-bold text-gray-600 mb-4">No pending approvals</h3>
-                <p className="text-gray-500">All submitted tasks have been reviewed.</p>
-              </div>
-            ) : (
-              <div className="grid gap-6">
-                {approvalRequests.map(request => (
-                  <div key={request.id} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                    <div className="space-y-6">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <h3 className="text-xl font-semibold text-gray-800">{request.title}</h3>
-                          <p className="text-gray-600">Reporter: {request.userName} ({request.userPhone})</p>
-                          <p className="text-gray-600">Worker: {request.assignedWorkerName}</p>
-                          <div className="flex items-center mt-2 space-x-2">
-                            <span className={`px-3 py-1 rounded-full text-xs font-medium ${getPriorityColor(request.priority)}`}>
-                              {request.priority} priority
+                      
+                      <div className="flex-1 space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+                          <div>
+                            <h3 className="text-2xl font-bold text-gray-800 mb-2">{report.title}</h3>
+                            <div className="space-y-1">
+                              <p className="text-gray-600">Reporter: <span className="font-medium">{report.userName}</span></p>
+                              <p className="text-gray-600">Contact: <span className="font-medium">{report.userPhone}</span></p>
+                              {report.assignedWorkerName && (
+                                <p className="text-gray-600">Assigned to: <span className="font-medium">{report.assignedWorkerName}</span></p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border ${getStatusColor(report.status)}`}>
+                              {report.status.replace('_', ' ')}
                             </span>
-                            {request.ecoPoints && (
-                              <span className="px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                {request.ecoPoints} eco-points to award
-                              </span>
+                            {report.ecoPoints && (
+                              <div className="flex items-center bg-green-50 text-green-700 px-3 py-1 rounded-full border border-green-200">
+                                <Award size={14} className="mr-1" />
+                                <span className="text-sm font-semibold">{report.ecoPoints} points</span>
+                              </div>
                             )}
                           </div>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
-                          Awaiting Approval
-                        </span>
-                      </div>
+                        
+                        <div className="flex items-center text-gray-600 bg-gray-50 p-3 rounded-xl">
+                          <MapPin size={18} className="mr-2 text-blue-600" />
+                          <span className="font-medium">{report.location.address}</span>
+                        </div>
 
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Original Report */}
-                        <div>
-                          <h4 className="font-semibold text-gray-800 mb-3">Original Report</h4>
-                          <img
-                            src={request.imageUrl}
-                            alt="Original Report"
-                            className="w-full h-48 object-cover rounded-xl mb-3"
-                          />
-                          <div className="bg-blue-50 p-3 rounded-lg">
-                            <div className="flex items-center text-blue-700">
-                              <MapPin size={16} className="mr-2" />
-                              <span className="text-sm">{request.location.address}</span>
+                        {/* AI Analysis */}
+                        {report.aiAnalysis && (
+                          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                            <div className="flex items-center mb-2">
+                              <Sparkles size={16} className="text-purple-600 mr-2" />
+                              <span className="font-semibold text-purple-800 text-sm">AI Analysis</span>
+                            </div>
+                            <div className="text-sm text-purple-700">
+                              <p><span className="font-medium">Type:</span> {report.aiAnalysis.waste_type}</p>
+                              <p><span className="font-medium">Impact:</span> {report.aiAnalysis.environmental_impact}</p>
                             </div>
                           </div>
+                        )}
+                        
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                          <div className="flex items-center text-gray-500">
+                            <Calendar size={16} className="mr-2" />
+                            <span className="text-sm">
+                              Submitted: {report.submittedAt.toLocaleDateString('en-IN', { 
+                                day: 'numeric', 
+                                month: 'short', 
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setReportDetailModal({ isOpen: true, report })}
+                              className="flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                            >
+                              <Eye size={16} className="mr-2" />
+                              View Details
+                            </button>
+                            
+                            {report.status === 'submitted' && (
+                              <button
+                                onClick={() => setAssignTaskModal({ isOpen: true, report })}
+                                className="flex items-center px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                              >
+                                <UserCheck size={16} className="mr-2" />
+                                Assign Worker
+                              </button>
+                            )}
+                            
+                            {report.status === 'submitted_for_approval' && (
+                              <button
+                                onClick={() => setProofReviewModal({ isOpen: true, report })}
+                                className="flex items-center px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
+                              >
+                                <CheckCircle size={16} className="mr-2" />
+                                Review Proof
+                              </button>
+                            )}
+                          </div>
                         </div>
-
-                        {/* Proof Submission */}
-                        <div>
-                          <h4 className="font-semibold text-gray-800 mb-3">Proof of Completion</h4>
-                          {request.proofImage && (
-                            <img
-                              src={request.proofImage}
-                              alt="Proof of Completion"
-                              className="w-full h-48 object-cover rounded-xl mb-3"
-                            />
-                          )}
-                          {request.proofLocation && (
-                            <div className="bg-green-50 p-3 rounded-lg">
-                              <div className="flex items-center text-green-700">
-                                <MapPin size={16} className="mr-2" />
-                                <span className="text-sm">
-                                  Proof location ({request.proofLocation.lat.toFixed(6)}, {request.proofLocation.lng.toFixed(6)})
-                                </span>
-                              </div>
-                              {request.proofLocation && (
-                                <div className="mt-2 text-sm text-green-600">
-                                  Distance from original: {
-                                    calculateDistance(
-                                      request.location.lat,
-                                      request.location.lng,
-                                      request.proofLocation.lat,
-                                      request.proofLocation.lng
-                                    ).toFixed(0)
-                                  }m
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end space-x-4">
-                        <button
-                          onClick={() => openApprovalModal(request)}
-                          className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center"
-                        >
-                          <ThumbsDown size={16} className="mr-2" />
-                          Reject
-                        </button>
-                        <button
-                          onClick={() => approveTask(request.id)}
-                          className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center"
-                        >
-                          <ThumbsUp size={16} className="mr-2" />
-                          Approve & Award {request.ecoPoints || 0} Points
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -885,59 +1260,65 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {/* Workers Management */}
         {activeTab === 'workers' && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-800">Worker Management</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-3xl font-bold text-gray-800">Worker Management</h2>
+              <div className="text-sm text-gray-600">
+                {workers.length} total workers
+              </div>
+            </div>
             
             {loadingWorkers ? (
               <div className="flex justify-center items-center py-12">
                 <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
                 <span className="ml-3 text-gray-600">Loading workers...</span>
               </div>
+            ) : workers.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
+                <Users size={64} className="text-gray-400 mx-auto mb-6" />
+                <h3 className="text-2xl font-bold text-gray-600 mb-4">No workers registered</h3>
+                <p className="text-gray-500">Workers will appear here once they register in the system.</p>
+              </div>
             ) : (
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {workers.map(worker => (
-                  <div key={worker.id} className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-800">{worker.name}</h3>
-                        <p className="text-gray-600">{worker.email}</p>
-                        <p className="text-sm text-gray-500">Assigned to: {worker.ward}</p>
+                  <div key={worker.id} className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+                    <div className="text-center mb-6">
+                      <div className="w-20 h-20 bg-gradient-to-br from-orange-400 to-red-500 rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-xl">
+                        <User size={32} className="text-white" />
                       </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        worker.status === 'available' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
+                      <h3 className="text-xl font-bold text-gray-800 mb-2">{worker.name}</h3>
+                      <p className="text-gray-600 mb-4">{worker.ward}</p>
+                      <span className={`inline-block px-4 py-2 rounded-full text-sm font-medium ${getWorkerStatusColor(worker.status)}`}>
                         {worker.status}
                       </span>
                     </div>
                     
                     <div className="space-y-3">
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Phone size={16} className="mr-2" />
-                        {worker.phone}
+                      <div className="flex items-center text-gray-600">
+                        <Mail size={16} className="mr-3 text-gray-400" />
+                        <span className="text-sm">{worker.email}</span>
                       </div>
-                      
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Completed Tasks</span>
-                        <span className="font-semibold">{worker.completedTasks}</span>
+                      <div className="flex items-center text-gray-600">
+                        <Phone size={16} className="mr-3 text-gray-400" />
+                        <span className="text-sm">{worker.phone}</span>
                       </div>
-                      
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Rating</span>
-                        <div className="flex items-center">
-                          <Star size={16} className="text-yellow-500 mr-1" />
-                          <span className="font-semibold">{worker.rating.toFixed(1)}</span>
-                        </div>
+                      <div className="flex items-center text-gray-600">
+                        <Target size={16} className="mr-3 text-gray-400" />
+                        <span className="text-sm">{worker.completedTasks} tasks completed</span>
                       </div>
-                      
-                      {worker.currentTask && (
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                          <p className="text-sm text-blue-800">
-                            Currently working on task: {worker.currentTask}
-                          </p>
-                        </div>
-                      )}
+                      <div className="flex items-center text-gray-600">
+                        <Star size={16} className="mr-3 text-gray-400" />
+                        <span className="text-sm">{worker.rating}/5.0 rating</span>
+                      </div>
                     </div>
+                    
+                    {worker.currentTask && (
+                      <div className="mt-6 p-4 bg-orange-50 border border-orange-200 rounded-xl">
+                        <p className="text-orange-800 text-sm font-medium">
+                          Currently working on task: {worker.currentTask}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -948,201 +1329,651 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         {/* Analytics */}
         {activeTab === 'analytics' && (
           <div className="space-y-8">
-            <h2 className="text-2xl font-bold text-gray-800">Analytics Dashboard</h2>
+            <h2 className="text-3xl font-bold text-gray-800">Analytics Dashboard</h2>
             
             {/* Key Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-blue-600 mb-2">
-                    {complaints.length > 0 ? ((completedComplaints.length / complaints.length) * 100).toFixed(1) : 0}%
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Resolution Rate</p>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {analytics ? Math.round((analytics.completedReports / analytics.totalReports) * 100) : 0}%
+                    </p>
                   </div>
-                  <p className="text-gray-600">Resolution Rate</p>
+                  <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                    <CheckCircle className="text-green-600" size={24} />
+                  </div>
                 </div>
               </div>
               
               <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-green-600 mb-2">
-                    {mockAnalytics.averageResolutionTime}h
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Avg Resolution Time</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics?.averageResolutionTime || 0}h</p>
                   </div>
-                  <p className="text-gray-600">Avg Resolution Time</p>
+                  <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <Clock className="text-blue-600" size={24} />
+                  </div>
                 </div>
               </div>
               
               <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-purple-600 mb-2">
-                    {mockAnalytics.cleanlinessIndex}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Cleanliness Index</p>
+                    <p className="text-2xl font-bold text-gray-900">{analytics?.cleanlinessIndex || 0}%</p>
                   </div>
-                  <p className="text-gray-600">Cleanliness Index</p>
+                  <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                    <PieChart className="text-purple-600" size={24} />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600">Worker Efficiency</p>
+                    <p className="text-2xl font-bold text-gray-900">92%</p>
+                  </div>
+                  <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                    <Zap className="text-orange-600" size={24} />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Priority Distribution */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Priority Distribution & Points</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {['low', 'medium', 'high', 'urgent'].map(priority => {
-                  const count = complaints.filter(c => c.priority === priority).length;
-                  const points = priority === 'low' ? 10 : priority === 'medium' ? 20 : priority === 'high' ? 30 : 40;
-                  return (
-                    <div key={priority} className="text-center p-4 bg-gray-50 rounded-xl">
-                      <div className={`text-2xl font-bold mb-2 ${getPriorityColor(priority).replace('bg-', 'text-').replace('-100', '-600')}`}>
-                        {count}
+            {/* Charts Placeholder */}
+            <div className="grid lg:grid-cols-2 gap-8">
+              <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Reports by Status</h3>
+                <div className="space-y-4">
+                  {[
+                    { status: 'Completed', count: analytics?.completedReports || 0, color: 'bg-green-500' },
+                    { status: 'Pending', count: analytics?.pendingReports || 0, color: 'bg-yellow-500' },
+                    { status: 'In Progress', count: reports.filter(r => r.status === 'assigned').length, color: 'bg-blue-500' }
+                  ].map(item => (
+                    <div key={item.status} className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className={`w-4 h-4 ${item.color} rounded mr-3`}></div>
+                        <span className="text-gray-700">{item.status}</span>
                       </div>
-                      <p className="text-sm text-gray-600 capitalize">{priority} Priority</p>
-                      <p className="text-xs text-gray-500">{points} points each</p>
+                      <span className="font-semibold text-gray-900">{item.count}</span>
                     </div>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-
-            {/* Monthly Trends */}
-            <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">Monthly Trends</h3>
-              <div className="space-y-4">
-                {mockAnalytics.monthlyTrends.map((trend, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                    <span className="font-medium text-gray-700">{trend.month}</span>
-                    <div className="flex space-x-4">
-                      <div className="text-sm">
-                        <span className="text-gray-600">Complaints: </span>
-                        <span className="font-semibold text-blue-600">{trend.complaints}</span>
+              
+              <div className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100">
+                <h3 className="text-xl font-bold text-gray-800 mb-6">Priority Distribution</h3>
+                <div className="space-y-4">
+                  {[
+                    { priority: 'Urgent', count: reports.filter(r => r.priority === 'urgent').length, color: 'bg-red-500' },
+                    { priority: 'High', count: reports.filter(r => r.priority === 'high').length, color: 'bg-orange-500' },
+                    { priority: 'Medium', count: reports.filter(r => r.priority === 'medium').length, color: 'bg-yellow-500' },
+                    { priority: 'Low', count: reports.filter(r => r.priority === 'low').length, color: 'bg-green-500' }
+                  ].map(item => (
+                    <div key={item.priority} className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <div className={`w-4 h-4 ${item.color} rounded mr-3`}></div>
+                        <span className="text-gray-700">{item.priority}</span>
                       </div>
-                      <div className="text-sm">
-                        <span className="text-gray-600">Resolved: </span>
-                        <span className="font-semibold text-green-600">{trend.resolved}</span>
-                      </div>
+                      <span className="font-semibold text-gray-900">{item.count}</span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
         )}
+
+        {/* Eco Store Management */}
+        {activeTab === 'ecostore' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-3xl font-bold text-gray-800">Eco Store Management</h2>
+              <button
+                onClick={() => openProductModal()}
+                className="flex items-center px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors shadow-lg"
+              >
+                <Plus size={20} className="mr-2" />
+                Add Product
+              </button>
+            </div>
+            
+            {loadingProducts ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="ml-3 text-gray-600">Loading products...</span>
+              </div>
+            ) : ecoProducts.length === 0 ? (
+              <div className="bg-white rounded-3xl p-12 shadow-lg border border-gray-100 text-center">
+                <Package size={64} className="text-gray-400 mx-auto mb-6" />
+                <h3 className="text-2xl font-bold text-gray-600 mb-4">No products yet</h3>
+                <p className="text-gray-500 mb-8">Start by adding eco-friendly products to the store.</p>
+                <button
+                  onClick={() => openProductModal()}
+                  className="bg-green-500 text-white px-6 py-3 rounded-xl hover:bg-green-600 transition-colors"
+                >
+                  Add First Product
+                </button>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {ecoProducts.map(product => (
+                  <div key={product.id} className="bg-white rounded-3xl p-8 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="w-full h-48 object-cover rounded-2xl mb-6 shadow-lg"
+                    />
+                    
+                    <h3 className="text-xl font-bold text-gray-800 mb-3">{product.name}</h3>
+                    <p className="text-gray-600 mb-6 leading-relaxed">{product.description}</p>
+                    
+                    <div className="flex justify-between items-center mb-6">
+                      <div className="flex items-center text-green-600 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
+                        <Award size={20} className="mr-2" />
+                        <span className="font-bold text-lg">{product.eco_points} Points</span>
+                      </div>
+                      <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                        {product.stock} in stock
+                      </span>
+                    </div>
+                    
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => openProductModal(product)}
+                        className="flex-1 flex items-center justify-center px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 transition-colors"
+                      >
+                        <Edit3 size={16} className="mr-2" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteEcoProduct(product.id)}
+                        className="flex items-center justify-center px-4 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Assignment Confirmation Modal */}
-      {assignmentModal.isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Confirm Assignment</h3>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to assign report "{assignmentModal.reportTitle}" in {assignmentModal.reportWard} to {assignmentModal.workerName}?
-            </p>
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setAssignmentModal({ isOpen: false, reportId: '', reportTitle: '', reportWard: '', workerId: '', workerName: '' })}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmAssignment}
-                className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-              >
-                Confirm
-              </button>
+      {/* Report Detail Modal */}
+      {reportDetailModal.isOpen && reportDetailModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">Report Details</h3>
+                <button
+                  onClick={() => setReportDetailModal({ isOpen: false, report: null })}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="grid lg:grid-cols-2 gap-8">
+                {/* Images */}
+                <div>
+                  <h4 className="font-semibold text-gray-800 mb-4">Report Images</h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    {reportDetailModal.report.images?.map((image, index) => (
+                      <img
+                        key={index}
+                        src={image}
+                        alt={`Report ${index + 1}`}
+                        className="w-full h-32 object-cover rounded-xl shadow-md"
+                      />
+                    )) || (
+                      <img
+                        src={reportDetailModal.report.imageUrl}
+                        alt="Report"
+                        className="w-full h-32 object-cover rounded-xl shadow-md"
+                      />
+                    )}
+                  </div>
+                  
+                  {reportDetailModal.report.proofImage && (
+                    <div className="mt-6">
+                      <h4 className="font-semibold text-gray-800 mb-4">Completion Proof</h4>
+                      <img
+                        src={reportDetailModal.report.proofImage}
+                        alt="Completion Proof"
+                        className="w-full h-48 object-cover rounded-xl shadow-md"
+                      />
+                    </div>
+                  )}
+                </div>
+                
+                {/* Details */}
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="font-semibold text-gray-800 mb-3">Report Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-gray-600">Reporter:</span>
+                        <span className="ml-2 font-medium">{reportDetailModal.report.userName}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Contact:</span>
+                        <span className="ml-2 font-medium">{reportDetailModal.report.userPhone}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Status:</span>
+                        <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(reportDetailModal.report.status)}`}>
+                          {reportDetailModal.report.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Priority:</span>
+                        <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${getPriorityColor(reportDetailModal.report.priority)}`}>
+                          {reportDetailModal.report.priority}
+                        </span>
+                      </div>
+                      {reportDetailModal.report.ecoPoints && (
+                        <div>
+                          <span className="text-gray-600">Eco Points:</span>
+                          <span className="ml-2 font-medium text-green-600">{reportDetailModal.report.ecoPoints} points</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-semibold text-gray-800 mb-3">Location</h4>
+                    <div className="bg-gray-50 p-4 rounded-xl">
+                      <div className="flex items-center text-gray-700">
+                        <MapPin size={16} className="mr-2 text-blue-600" />
+                        <span>{reportDetailModal.report.location.address}</span>
+                      </div>
+                      <div className="text-sm text-gray-500 mt-2">
+                        Coordinates: {reportDetailModal.report.location.lat.toFixed(6)}, {reportDetailModal.report.location.lng.toFixed(6)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {reportDetailModal.report.assignedWorkerName && (
+                    <div>
+                      <h4 className="font-semibold text-gray-800 mb-3">Assignment</h4>
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                        <div className="flex items-center text-blue-700">
+                          <UserCheck size={16} className="mr-2" />
+                          <span>Assigned to: {reportDetailModal.report.assignedWorkerName}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {reportDetailModal.report.aiAnalysis && (
+                    <div>
+                      <h4 className="font-semibold text-gray-800 mb-3">AI Analysis</h4>
+                      <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                        <div className="space-y-2 text-sm">
+                          <p><span className="font-medium text-purple-700">Waste Type:</span> {reportDetailModal.report.aiAnalysis.waste_type}</p>
+                          <p><span className="font-medium text-purple-700">Severity:</span> {reportDetailModal.report.aiAnalysis.severity}</p>
+                          <p><span className="font-medium text-purple-700">Environmental Impact:</span> {reportDetailModal.report.aiAnalysis.environmental_impact}</p>
+                          <p><span className="font-medium text-purple-700">Cleanup Difficulty:</span> {reportDetailModal.report.aiAnalysis.cleanup_difficulty}</p>
+                          <p><span className="font-medium text-purple-700">Reasoning:</span> {reportDetailModal.report.aiAnalysis.reasoning}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <h4 className="font-semibold text-gray-800 mb-3">Timeline</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Submitted:</span>
+                        <span className="font-medium">{reportDetailModal.report.submittedAt.toLocaleString()}</span>
+                      </div>
+                      {reportDetailModal.report.completedAt && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Completed:</span>
+                          <span className="font-medium">{reportDetailModal.report.completedAt.toLocaleString()}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Detail Modal */}
-      {detailModal.isOpen && detailModal.report && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-2xl font-bold text-gray-800">Report Details</h3>
-              <button
-                onClick={() => setDetailModal({ isOpen: false, report: null })}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X size={24} />
-              </button>
-            </div>
-            
-            <div className="space-y-6">
-              {/* Images Carousel */}
-              <div>
-                <h4 className="font-semibold text-gray-800 mb-3">Images ({detailModal.report.images?.length || 1})</h4>
-                <div className="relative">
-                  <img
-                    src={detailModal.report.images?.[currentImageIndex] || detailModal.report.imageUrl}
-                    alt={`Report image ${currentImageIndex + 1}`}
-                    className="w-full h-64 object-cover rounded-xl"
-                  />
-                  {detailModal.report.images && detailModal.report.images.length > 1 && (
-                    <div className="flex justify-center mt-4 space-x-2">
-                      {detailModal.report.images.map((_, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setCurrentImageIndex(index)}
-                          className={`w-3 h-3 rounded-full ${
-                            index === currentImageIndex ? 'bg-blue-500' : 'bg-gray-300'
-                          }`}
-                        />
-                      ))}
+      {/* Assign Task Modal */}
+      {assignTaskModal.isOpen && assignTaskModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">Assign Task to Worker</h3>
+                <button
+                  onClick={() => setAssignTaskModal({ isOpen: false, report: null })}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <h4 className="font-semibold text-gray-800 mb-3">Report Details</h4>
+                <div className="bg-gray-50 p-4 rounded-xl">
+                  <p className="text-gray-700 mb-2">
+                    <span className="font-medium">Location:</span> {assignTaskModal.report.location.address}
+                  </p>
+                  <p className="text-gray-700">
+                    <span className="font-medium">Priority:</span> 
+                    <span className={`ml-2 px-2 py-1 rounded text-sm ${getPriorityColor(assignTaskModal.report.priority)}`}>
+                      {assignTaskModal.report.priority}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <h4 className="font-semibold text-gray-800 mb-3">Available Workers</h4>
+                <div className="space-y-3 max-h-64 overflow-y-auto">
+                  {workers.filter(w => w.status === 'available').length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users size={48} className="mx-auto mb-4 text-gray-400" />
+                      <p>No workers available at the moment</p>
                     </div>
+                  ) : (
+                    workers.filter(w => w.status === 'available').map(worker => (
+                      <div
+                        key={worker.id}
+                        className="flex items-center justify-between p-4 border border-gray-200 rounded-xl hover:bg-gray-50 cursor-pointer"
+                        onClick={() => assignTaskToWorker(assignTaskModal.report!.id, worker.id)}
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-orange-400 to-red-500 rounded-lg flex items-center justify-center">
+                            <User size={16} className="text-white" />
+                          </div>
+                          <div>
+                            <h5 className="font-semibold text-gray-800">{worker.name}</h5>
+                            <p className="text-sm text-gray-600">{worker.ward} • {worker.completedTasks} tasks completed</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="flex items-center text-yellow-600 mb-1">
+                            <Star size={14} className="mr-1" />
+                            <span className="text-sm font-medium">{worker.rating}</span>
+                          </div>
+                          <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">Available</span>
+                        </div>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
+              
+              {assigningTask && (
+                <div className="text-center py-4">
+                  <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                  <p className="text-gray-600">Assigning task...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-              {/* Report Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Proof Review Modal */}
+      {proofReviewModal.isOpen && proofReviewModal.report && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">Review Completion Proof</h3>
+                <button
+                  onClick={() => setProofReviewModal({ isOpen: false, report: null })}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="grid lg:grid-cols-2 gap-8">
+                {/* Before/After Comparison */}
                 <div>
-                  <h4 className="font-semibold text-gray-800 mb-3">Reporter Information</h4>
-                  <div className="space-y-2">
-                    <p><span className="font-medium">Name:</span> {detailModal.report.userName}</p>
-                    <p><span className="font-medium">Phone:</span> {detailModal.report.userPhone}</p>
-                    <p><span className="font-medium">Submitted:</span> {detailModal.report.submittedAt.toLocaleDateString()}</p>
+                  <h4 className="font-semibold text-gray-800 mb-4">Before (Original Report)</h4>
+                  <img
+                    src={proofReviewModal.report.imageUrl}
+                    alt="Original Report"
+                    className="w-full h-64 object-cover rounded-xl shadow-md mb-6"
+                  />
+                  
+                  <h4 className="font-semibold text-gray-800 mb-4">After (Completion Proof)</h4>
+                  {proofReviewModal.report.proofImage ? (
+                    <img
+                      src={proofReviewModal.report.proofImage}
+                      alt="Completion Proof"
+                      className="w-full h-64 object-cover rounded-xl shadow-md"
+                    />
+                  ) : (
+                    <div className="w-full h-64 bg-gray-100 rounded-xl flex items-center justify-center">
+                      <p className="text-gray-500">No proof image available</p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Review Details */}
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="font-semibold text-gray-800 mb-3">Task Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <span className="text-gray-600">Worker:</span>
+                        <span className="ml-2 font-medium">{proofReviewModal.report.assignedWorkerName}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Location:</span>
+                        <span className="ml-2 font-medium">{proofReviewModal.report.location.address}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Eco Points to Award:</span>
+                        <span className="ml-2 font-medium text-green-600">{proofReviewModal.report.ecoPoints} points</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-semibold text-gray-800 mb-3">Review Decision</h4>
+                    <div className="space-y-4">
+                      <button
+                        onClick={() => approveTask(proofReviewModal.report!.id)}
+                        disabled={reviewingProof}
+                        className="w-full flex items-center justify-center px-6 py-4 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50"
+                      >
+                        {reviewingProof ? (
+                          <>
+                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                            Processing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle size={20} className="mr-2" />
+                            Approve & Award Points
+                          </>
+                        )}
+                      </button>
+                      
+                      <div className="space-y-3">
+                        <textarea
+                          value={rejectionComment}
+                          onChange={(e) => setRejectionComment(e.target.value)}
+                          placeholder="Reason for rejection (required if rejecting)"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
+                          rows={3}
+                        />
+                        <button
+                          onClick={() => rejectTask(proofReviewModal.report!.id, rejectionComment)}
+                          disabled={reviewingProof || !rejectionComment.trim()}
+                          className="w-full flex items-center justify-center px-6 py-4 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-colors disabled:opacity-50"
+                        >
+                          <X size={20} className="mr-2" />
+                          Reject & Request Resubmission
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+                    <div className="flex items-start">
+                      <AlertCircle size={16} className="text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-yellow-800">
+                        <p className="font-medium mb-1">Review Guidelines:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          <li>Compare before and after images carefully</li>
+                          <li>Ensure the area is properly cleaned</li>
+                          <li>Verify the proof image is from the correct location</li>
+                          <li>Approve only if the cleanup meets standards</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Eco Store Product Modal */}
+      {ecoStoreModal.isOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">
+                  {ecoStoreModal.isEditing ? 'Edit Product' : 'Add New Product'}
+                </h3>
+                <button
+                  onClick={() => setEcoStoreModal({ isOpen: false, product: null, isEditing: false })}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Product Name *</label>
+                  <input
+                    type="text"
+                    value={productForm.name}
+                    onChange={(e) => setProductForm(prev => ({ ...prev, name: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="Enter product name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
+                  <textarea
+                    value={productForm.description}
+                    onChange={(e) => setProductForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent resize-none"
+                    rows={3}
+                    placeholder="Enter product description"
+                  />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Point Cost *</label>
+                    <input
+                      type="number"
+                      value={productForm.point_cost}
+                      onChange={(e) => setProductForm(prev => ({ ...prev, point_cost: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="0"
+                      min="0"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Quantity *</label>
+                    <input
+                      type="number"
+                      value={productForm.quantity}
+                      onChange={(e) => setProductForm(prev => ({ ...prev, quantity: parseInt(e.target.value) || 0 }))}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="0"
+                      min="0"
+                    />
                   </div>
                 </div>
                 
                 <div>
-                  <h4 className="font-semibold text-gray-800 mb-3">Report Status</h4>
-                  <div className="space-y-2">
-                    <p><span className="font-medium">Status:</span> 
-                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(detailModal.report.status)}`}>
-                        {detailModal.report.status.replace('_', ' ')}
-                      </span>
-                    </p>
-                    <p><span className="font-medium">Priority:</span> 
-                      <span className={`ml-2 px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(detailModal.report.priority)}`}>
-                        {detailModal.report.priority}
-                      </span>
-                    </p>
-                    {detailModal.report.ecoPoints && (
-                      <p><span className="font-medium">Eco Points:</span> 
-                        <span className="ml-2 px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          {detailModal.report.ecoPoints} points
-                        </span>
-                      </p>
-                    )}
-                    {detailModal.report.assignedWorkerName && (
-                      <p><span className="font-medium">Assigned to:</span> {detailModal.report.assignedWorkerName}</p>
-                    )}
-                  </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Category *</label>
+                  <select
+                    value={productForm.category}
+                    onChange={(e) => setProductForm(prev => ({ ...prev, category: e.target.value as any }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  >
+                    <option value="tools">Tools</option>
+                    <option value="dustbins">Dustbins</option>
+                    <option value="compost">Compost</option>
+                    <option value="plants">Plants</option>
+                    <option value="vouchers">Vouchers</option>
+                  </select>
                 </div>
-              </div>
-
-              {/* Location Map */}
-              <div>
-                <h4 className="font-semibold text-gray-800 mb-3">Location</h4>
-                <div className="bg-blue-50 p-4 rounded-xl">
-                  <div className="flex items-center text-blue-700">
-                    <MapPin size={20} className="mr-2" />
-                    <span>{detailModal.report.location.address}</span>
-                  </div>
-                  <p className="text-sm text-blue-600 mt-2">
-                    Coordinates: {detailModal.report.location.lat.toFixed(6)}, {detailModal.report.location.lng.toFixed(6)}
-                  </p>
-                  <p className="text-sm text-blue-600">
-                    Ward: {extractWardFromAddress(detailModal.report.location.address)}
-                  </p>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Image URL *</label>
+                  <input
+                    type="url"
+                    value={productForm.image_url}
+                    onChange={(e) => setProductForm(prev => ({ ...prev, image_url: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                    placeholder="https://example.com/image.jpg"
+                  />
+                  {productForm.image_url && (
+                    <img
+                      src={productForm.image_url}
+                      alt="Preview"
+                      className="mt-3 w-full h-32 object-cover rounded-xl"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
+                </div>
+                
+                <div className="flex space-x-4">
+                  <button
+                    onClick={() => setEcoStoreModal({ isOpen: false, product: null, isEditing: false })}
+                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEcoProduct}
+                    disabled={savingProduct || !productForm.name.trim() || !productForm.description.trim() || !productForm.image_url.trim()}
+                    className="flex-1 px-6 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    {savingProduct ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save size={20} className="mr-2" />
+                        {ecoStoreModal.isEditing ? 'Update Product' : 'Add Product'}
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
@@ -1150,38 +1981,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         </div>
       )}
 
-      {/* Approval Modal */}
-      {approvalModal.isOpen && approvalModal.report && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full mx-4">
-            <h3 className="text-xl font-bold text-gray-800 mb-4">Reject Task</h3>
-            <p className="text-gray-600 mb-4">
-              Please provide a reason for rejecting this task completion:
-            </p>
-            <textarea
-              value={rejectionComment}
-              onChange={(e) => setRejectionComment(e.target.value)}
-              placeholder="Enter rejection reason..."
-              className="w-full p-3 border border-gray-300 rounded-lg mb-6 resize-none"
-              rows={4}
-            />
-            <div className="flex space-x-4">
-              <button
-                onClick={() => setApprovalModal({ isOpen: false, report: null })}
-                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => rejectTask(approvalModal.report!.id, rejectionComment)}
-                disabled={!rejectionComment.trim()}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Reject Task
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Click outside to close dropdowns */}
+      {(showUserDropdown || showNotifications) && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => {
+            setShowUserDropdown(false);
+            setShowNotifications(false);
+          }}
+        />
       )}
     </div>
   );
