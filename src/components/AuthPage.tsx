@@ -7,7 +7,6 @@ import {
   Lock, 
   Phone, 
   CreditCard, 
-  Leaf,
   Eye,
   EyeOff,
   ArrowRight,
@@ -15,6 +14,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { Logo } from './Logo';
 
 interface AuthPageProps {
   onAuthSuccess: () => void;
@@ -188,9 +188,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
         <div className="hidden lg:block">
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-12 text-white shadow-2xl">
             <div className="flex items-center mb-8">
-              <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mr-4">
-                <Leaf className="text-white" size={32} />
-              </div>
+              <Logo size="xl" variant="icon" className="mr-4 bg-white/20 rounded-2xl p-4" />
               <h1 className="text-4xl font-bold">Niramay</h1>
             </div>
             
@@ -239,9 +237,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onAuthSuccess }) => {
             {/* Header */}
             <div className="text-center mb-8">
               <div className="flex items-center justify-center mb-4 lg:hidden">
-                <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mr-3">
-                  <Leaf className="text-white" size={24} />
-                </div>
+                <Logo size="md" className="mr-3" />
                 <h1 className="text-2xl font-bold text-gray-800">Niramay</h1>
               </div>
               <h2 className="text-2xl font-bold text-gray-800 mb-2">
