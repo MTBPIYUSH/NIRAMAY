@@ -86,12 +86,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   // Verify admin access
   useEffect(() => {
     if (user.role !== 'admin') {
-      console.error('❌ Unauthorized access attempt - user is not admin');
+      console.error('Unauthorized access attempt - user is not admin');
       onLogout();
       return;
     }
     
-    console.log('✅ Admin access verified for user:', user.id);
+    console.log('Admin access verified for user:', user.id);
     fetchReports();
     loadSubWorkers();
   }, [user.id, user.role]);
@@ -115,7 +115,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
   const fetchReports = async () => {
     setLoadingReports(true);
     try {
-      console.log('📊 Fetching reports for admin...');
+      console.log('Fetching reports for admin...');
       
       // Fetch all reports (admins can see all reports)
       const { data: reportsData, error: reportsError } = await supabase
@@ -124,11 +124,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
         .order('created_at', { ascending: false });
 
       if (reportsError) {
-        console.error('❌ Error fetching reports:', reportsError);
+        console.error('Error fetching reports:', reportsError);
         return;
       }
 
-      console.log('✅ Reports fetched:', reportsData?.length || 0);
+      console.log('Reports fetched:', reportsData?.length || 0);
 
       // Fetch reporter profiles
       const userIds = reportsData?.map(report => report.user_id).filter(Boolean) || [];
@@ -141,7 +141,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
           .in('id', userIds);
 
         if (profilesError) {
-          console.error('❌ Error fetching reporter profiles:', profilesError);
+          console.error('Error fetching reporter profiles:', profilesError);
         } else {
           profilesData = profiles || [];
         }
@@ -180,7 +180,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       setReports(convertedReports);
 
     } catch (error) {
-      console.error('❌ Error in fetchReports:', error);
+      console.error('Error in fetchReports:', error);
     } finally {
       setLoadingReports(false);
     }
@@ -192,7 +192,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onLogout }
       const workers = await fetchSubWorkers();
       setSubWorkers(workers);
     } catch (error) {
-      console.error('❌ Error loading subworkers:', error);
+      console.error('Error loading subworkers:', error);
     } finally {
       setLoadingWorkers(false);
     }
