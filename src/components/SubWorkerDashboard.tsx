@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle, Navigation, Map as MapIcon, Route } from 'lucide-react';
+import { CheckCircle, Clock, MapPin, Star, TrendingUp, Camera, Upload, X, AlertTriangle, Navigation, Map as MapIcon, Route, Send } from 'lucide-react';
 import { Profile, supabase } from '../lib/supabase';
 import { Complaint, SubWorker } from '../types';
 import { 
@@ -28,6 +28,10 @@ interface DatabaseReport {
   proof_lat?: number;
   proof_lng?: number;
   rejection_comment?: string;
+  rejection_reason?: string;
+  completion_timestamp?: string;
+  priority_level?: string;
+  eco_points?: number;
 }
 
 interface ReporterProfile {
@@ -175,8 +179,8 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
             lng: report.lng,
             address: report.address
           },
-          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval',
-          priority: 'medium' as 'low' | 'medium' | 'high' | 'critical',
+          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval' | 'approved' | 'rejected',
+          priority: (report.priority_level as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
           submittedAt: new Date(report.created_at),
           assignedTo: report.assigned_to,
           proofImage: report.proof_image,
@@ -185,16 +189,19 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
             lng: report.proof_lng,
             address: 'Proof location'
           } : undefined,
-          rejectionComment: report.rejection_comment
+          rejectionComment: report.rejection_comment,
+          rejectionReason: report.rejection_reason,
+          completionTimestamp: report.completion_timestamp ? new Date(report.completion_timestamp) : undefined,
+          ecoPoints: report.eco_points
         };
       });
 
       setComplaints(convertedComplaints);
 
       // Check for recently rejected tasks
-      const rejectedTask = convertedComplaints.find(c => c.rejectionComment && c.status === 'assigned');
+      const rejectedTask = convertedComplaints.find(c => c.rejectionReason && (c.status === 'rejected' || c.status === 'assigned'));
       if (rejectedTask) {
-        setRejectionBanner(`Task was rejected: ${rejectedTask.rejectionComment}`);
+        setRejectionBanner(`Task was rejected: ${rejectedTask.rejectionReason}`);
         setTimeout(() => setRejectionBanner(''), 10000); // Hide after 10 seconds
       }
 
@@ -320,7 +327,9 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
           proof_image: proofImage,
           proof_lat: currentLocation.lat,
           proof_lng: currentLocation.lng,
-          rejection_comment: null // Clear any previous rejection comment
+          completion_timestamp: new Date().toISOString(),
+          rejection_comment: null, // Clear any previous rejection comment
+          rejection_reason: null // Clear any previous rejection reason
         })
         .eq('id', proofModal.report.id);
 
@@ -342,14 +351,16 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                 lng: currentLocation.lng,
                 address: 'Proof location'
               },
-              rejectionComment: undefined
+              completionTimestamp: new Date(),
+              rejectionComment: undefined,
+              rejectionReason: undefined
             }
           : complaint
       ));
 
       setProofModal({ isOpen: false, report: null });
       setProofImage('');
-      alert('Proof submitted for approval successfully!');
+      alert('Proof submitted for approval successfully! Please wait for admin approval.');
 
     } catch (error) {
       console.error('Error submitting proof:', error);
@@ -365,6 +376,8 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
       case 'in-progress': return 'bg-orange-100 text-orange-800';
       case 'completed': return 'bg-green-100 text-green-800';
       case 'submitted_for_approval': return 'bg-purple-100 text-purple-800';
+      case 'approved': return 'bg-green-100 text-green-800';
+      case 'rejected': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -374,13 +387,13 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
       case 'low': return 'bg-green-100 text-green-800';
       case 'medium': return 'bg-yellow-100 text-yellow-800';
       case 'high': return 'bg-orange-100 text-orange-800';
-      case 'critical': return 'bg-red-100 text-red-800';
+      case 'urgent': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const assignedTasks = complaints.filter(c => c.status === 'assigned');
-  const completedTasks = complaints.filter(c => c.status === 'completed');
+  const assignedTasks = complaints.filter(c => c.status === 'assigned' || c.status === 'rejected');
+  const completedTasks = complaints.filter(c => c.status === 'completed' || c.status === 'approved');
   const pendingApprovalTasks = complaints.filter(c => c.status === 'submitted_for_approval');
 
   return (
@@ -514,7 +527,7 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                     <p className="text-2xl font-bold text-gray-900">{pendingApprovalTasks.length}</p>
                   </div>
                   <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                    <Upload className="text-purple-600" size={24} />
+                    <Send className="text-purple-600" size={24} />
                   </div>
                 </div>
               </div>
@@ -570,12 +583,38 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                     </button>
                     <button
                       onClick={() => openProofModal(assignedTasks[0])}
-                      className="bg-white/20 text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/30 transition-colors flex items-center"
+                      disabled={assignedTasks[0].status === 'submitted_for_approval'}
+                      className="bg-white/20 text-white px-4 py-2 rounded-lg font-semibold hover:bg-white/30 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Camera size={16} className="mr-2" />
-                      Submit Proof
+                      {assignedTasks[0].status === 'submitted_for_approval' ? 'Awaiting Approval' : 'Submit Proof'}
                     </button>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Pending Approval Tasks */}
+            {pendingApprovalTasks.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Tasks Awaiting Approval</h3>
+                <div className="space-y-4">
+                  {pendingApprovalTasks.map(task => (
+                    <div key={task.id} className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-purple-800">{task.title}</h4>
+                        <span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-xs font-medium">
+                          Pending Approval
+                        </span>
+                      </div>
+                      <p className="text-purple-700 text-sm mb-2">
+                        Submitted: {task.completionTimestamp?.toLocaleString()}
+                      </p>
+                      <p className="text-purple-600 text-sm">
+                        Location: {task.location.address}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -688,21 +727,36 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                             </button>
                             <button
                               onClick={() => openProofModal(task)}
-                              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all"
+                              disabled={task.status === 'submitted_for_approval'}
+                              className="flex items-center px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <Camera size={16} className="mr-2" />
-                              Submit Proof
+                              {task.status === 'submitted_for_approval' ? 'Awaiting Approval' : 'Submit Proof'}
                             </button>
                           </div>
                         </div>
 
-                        {task.rejectionComment && (
+                        {task.rejectionReason && (
                           <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                             <div className="flex items-start">
                               <AlertTriangle size={16} className="text-red-500 mr-2 flex-shrink-0 mt-0.5" />
                               <div>
                                 <p className="text-red-800 font-medium text-sm">Previous submission was rejected:</p>
-                                <p className="text-red-700 text-sm mt-1">{task.rejectionComment}</p>
+                                <p className="text-red-700 text-sm mt-1">{task.rejectionReason}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {task.status === 'submitted_for_approval' && (
+                          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                            <div className="flex items-start">
+                              <Send size={16} className="text-purple-500 mr-2 flex-shrink-0 mt-0.5" />
+                              <div>
+                                <p className="text-purple-800 font-medium text-sm">Proof submitted for approval</p>
+                                <p className="text-purple-700 text-sm mt-1">
+                                  Submitted: {task.completionTimestamp?.toLocaleString()}
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -752,7 +806,8 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                         <div className="flex items-center text-green-600">
                           <CheckCircle size={14} className="mr-1" />
                           <span className="font-medium">
-                            {task.status === 'completed' ? 'Approved & Completed' : 'Awaiting Approval'}
+                            {task.status === 'completed' || task.status === 'approved' ? 'Approved & Completed' : 
+                             task.status === 'submitted_for_approval' ? 'Awaiting Approval' : 'Completed'}
                           </span>
                         </div>
                       </div>
@@ -850,10 +905,11 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                         setTaskDetailModal({ isOpen: false, report: null });
                         openProofModal(taskDetailModal.report!);
                       }}
-                      className="flex-1 flex items-center justify-center px-4 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors"
+                      disabled={taskDetailModal.report.status === 'submitted_for_approval'}
+                      className="flex-1 flex items-center justify-center px-4 py-3 bg-green-500 text-white rounded-xl hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Camera size={16} className="mr-2" />
-                      Submit Proof
+                      {taskDetailModal.report.status === 'submitted_for_approval' ? 'Awaiting Approval' : 'Submit Proof'}
                     </button>
                   </div>
                 </div>
@@ -1030,10 +1086,13 @@ export const SubWorkerDashboard: React.FC<SubWorkerDashboardProps> = ({ user, on
                   {submittingProof ? (
                     <>
                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                      Submitting...
+                      Submitting for Approval...
                     </>
                   ) : (
-                    'Submit for Approval'
+                    <>
+                      <Send size={16} className="mr-2" />
+                      Submit for Approval
+                    </>
                   )}
                 </button>
               </div>

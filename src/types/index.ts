@@ -23,7 +23,7 @@ export interface Complaint {
     lng: number;
     address: string;
   };
-  status: 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval';
+  status: 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval' | 'approved' | 'rejected';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assignedTo?: string;
   assignedWorkerName?: string;
@@ -37,6 +37,8 @@ export interface Complaint {
     address: string;
   };
   rejectionComment?: string;
+  rejectionReason?: string;
+  completionTimestamp?: Date;
   aiAnalysis?: {
     waste_type: string;
     severity: string;
