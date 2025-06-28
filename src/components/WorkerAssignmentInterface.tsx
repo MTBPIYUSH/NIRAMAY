@@ -12,7 +12,8 @@ import {
   AlertCircle,
   CheckCircle,
   Phone,
-  Mail
+  Mail,
+  Plus
 } from 'lucide-react';
 import {
   SubWorkerProfile,
@@ -70,6 +71,7 @@ export const WorkerAssignmentInterface: React.FC<WorkerAssignmentInterfaceProps>
   useEffect(() => {
     const subscription = subscribeToSubWorkers(
       (updatedWorkers) => {
+        console.log('📡 Real-time update received:', updatedWorkers.length, 'workers');
         setWorkers(updatedWorkers);
         updateStats(updatedWorkers);
       },
@@ -96,7 +98,10 @@ export const WorkerAssignmentInterface: React.FC<WorkerAssignmentInterfaceProps>
       setLoading(true);
       setError('');
       
+      console.log('🔄 Loading subworkers...');
       const fetchedWorkers = await fetchSubWorkers();
+      console.log('✅ Loaded workers:', fetchedWorkers);
+      
       setWorkers(fetchedWorkers);
       updateStats(fetchedWorkers);
       
@@ -283,13 +288,25 @@ export const WorkerAssignmentInterface: React.FC<WorkerAssignmentInterfaceProps>
         {filteredWorkers.length === 0 ? (
           <div className="text-center py-12">
             <Users size={48} className="text-gray-400 mx-auto mb-4" />
-            <h4 className="text-lg font-semibold text-gray-600 mb-2">No Workers Found</h4>
-            <p className="text-gray-500">
+            <h4 className="text-lg font-semibold text-gray-600 mb-2">
+              {workers.length === 0 ? 'No SubWorkers Found' : 'No Workers Match Filters'}
+            </h4>
+            <p className="text-gray-500 mb-4">
               {workers.length === 0 
-                ? "No subworker accounts exist in the system."
-                : "No workers match your current filters."
+                ? "No subworker accounts exist in the system. SubWorkers need to be created with role='subworker' in the profiles table."
+                : "No workers match your current filters. Try adjusting the search criteria."
               }
             </p>
+            {workers.length === 0 && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mx-4 text-left">
+                <h5 className="font-semibold text-yellow-800 mb-2">💡 How to add SubWorkers:</h5>
+                <ol className="text-sm text-yellow-700 space-y-1">
+                  <li>1. Create auth users in Supabase Dashboard</li>
+                  <li>2. Add profiles with role='subworker'</li>
+                  <li>3. Or use the seeding script in src/scripts/seedSubWorkers.ts</li>
+                </ol>
+              </div>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-gray-100">

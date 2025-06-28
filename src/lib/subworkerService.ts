@@ -41,7 +41,6 @@ export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
       .from('profiles')
       .select('*')
       .eq('role', 'subworker')
-      .neq('status', 'deleted') // Exclude deleted accounts
       .order('name');
 
     if (error) {
@@ -49,21 +48,27 @@ export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
       throw error;
     }
 
-    // Filter out test/debug accounts
-    const filteredWorkers = (data || []).filter(worker => {
-      const isTestAccount = worker.name?.toLowerCase().includes('test') ||
-                           worker.name?.toLowerCase().includes('debug') ||
-                           worker.name?.toLowerCase().includes('demo') ||
-                           worker.email?.toLowerCase().includes('test') ||
-                           worker.email?.toLowerCase().includes('debug');
-      
-      const hasValidName = worker.name && worker.name.trim().length > 0;
-      
-      return !isTestAccount && hasValidName;
-    });
+    console.log('✅ Raw subworkers data:', data);
 
-    console.log('✅ Subworkers fetched:', filteredWorkers.length);
-    return filteredWorkers;
+    // Convert the data to match our interface
+    const subworkers: SubWorkerProfile[] = (data || []).map(profile => ({
+      id: profile.id,
+      name: profile.name || 'Unknown Worker',
+      phone: profile.phone,
+      email: profile.email,
+      status: profile.status || 'available',
+      ward: profile.ward,
+      city: profile.city,
+      assigned_ward: profile.assigned_ward,
+      current_task_id: profile.current_task_id,
+      task_completion_count: profile.task_completion_count || 0,
+      created_at: profile.created_at,
+      updated_at: profile.updated_at,
+      eco_points: profile.eco_points
+    }));
+
+    console.log('✅ Processed subworkers:', subworkers.length, subworkers);
+    return subworkers;
 
   } catch (error) {
     console.error('❌ Error in fetchSubWorkers:', error);
@@ -308,7 +313,21 @@ export const getAvailableWorkersForWard = async (ward?: string): Promise<SubWork
       throw error;
     }
 
-    return data || [];
+    return (data || []).map(profile => ({
+      id: profile.id,
+      name: profile.name || 'Unknown Worker',
+      phone: profile.phone,
+      email: profile.email,
+      status: profile.status || 'available',
+      ward: profile.ward,
+      city: profile.city,
+      assigned_ward: profile.assigned_ward,
+      current_task_id: profile.current_task_id,
+      task_completion_count: profile.task_completion_count || 0,
+      created_at: profile.created_at,
+      updated_at: profile.updated_at,
+      eco_points: profile.eco_points
+    }));
 
   } catch (error) {
     console.error('❌ Error in getAvailableWorkersForWard:', error);
@@ -348,4 +367,52 @@ export const validateWorkerAssignment = (
   }
 
   return { isEligible: true };
+};
+
+/**
+ * Create sample subworker profiles for testing (admin only)
+ */
+export const createSampleSubWorkers = async (): Promise<void> => {
+  try {
+    console.log('🔧 Creating sample subworker profiles...');
+    
+    const sampleWorkers = [
+      {
+        name: 'Ravi Kumar',
+        phone: '+91 98765 43210',
+        status: 'busy',
+        ward: 'Ward 12',
+        city: 'Gurgaon',
+        assigned_ward: 'Ward 12',
+        task_completion_count: 45
+      },
+      {
+        name: 'Suresh Verma',
+        phone: '+91 87654 32109',
+        status: 'available',
+        ward: 'Ward 12',
+        city: 'Gurgaon',
+        assigned_ward: 'Ward 12',
+        task_completion_count: 38
+      },
+      {
+        name: 'Amit Singh',
+        phone: '+91 76543 21098',
+        status: 'available',
+        ward: 'Ward 12',
+        city: 'Gurgaon',
+        assigned_ward: 'Ward 12',
+        task_completion_count: 52
+      }
+    ];
+
+    // Note: This would require actual auth user IDs
+    // In a real implementation, you'd need to create auth users first
+    console.log('Sample workers data prepared:', sampleWorkers);
+    console.log('⚠️ Note: Actual implementation requires creating auth users first');
+
+  } catch (error) {
+    console.error('❌ Error creating sample subworkers:', error);
+    throw error;
+  }
 };
