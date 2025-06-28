@@ -294,7 +294,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   disabled={images.length === 0}
                   className={`w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-8 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all transform hover:scale-105 shadow-xl hover:shadow-2xl ${images.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  Submit Report 🚀
+                  Submit Report 
                 </button>
               </div>
             </div>
