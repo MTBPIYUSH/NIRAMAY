@@ -44,11 +44,11 @@ export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
       .order('name');
 
     if (error) {
-      console.error('❌ Error fetching subworkers:', error);
+      console.error('Error fetching subworkers:', error);
       throw error;
     }
 
-    console.log('✅ Raw subworkers data:', data);
+    console.log('Raw subworkers data:', data);
 
     // Convert the data to match our interface
     const subworkers: SubWorkerProfile[] = (data || []).map(profile => ({
@@ -67,11 +67,11 @@ export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
       eco_points: profile.eco_points
     }));
 
-    console.log('✅ Processed subworkers:', subworkers.length, subworkers);
+    console.log('Processed subworkers:', subworkers.length, subworkers);
     return subworkers;
 
   } catch (error) {
-    console.error('❌ Error in fetchSubWorkers:', error);
+    console.error('Error in fetchSubWorkers:', error);
     throw error;
   }
 };
@@ -96,12 +96,12 @@ export const subscribeToSubWorkers = (
         filter: 'role=eq.subworker'
       },
       async (payload) => {
-        console.log('🔄 Subworker data changed:', payload.eventType);
+        console.log('Subworker data changed:', payload.eventType);
         try {
           const workers = await fetchSubWorkers();
           callback(workers);
         } catch (error) {
-          console.error('❌ Error handling real-time update:', error);
+          console.error('Error handling real-time update:', error);
           onError?.(error as Error);
         }
       }
