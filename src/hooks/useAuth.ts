@@ -11,13 +11,13 @@ export const useAuth = () => {
   useEffect(() => {
     let mounted = true;
 
-    // Get initial session with timeout and error handling
+    // Get initial session with improved error handling
     const getInitialSession = async () => {
       try {
-        // Set a timeout for the session check - reduced to 10 seconds for better UX
+        // Increase timeout to 15 seconds and add retry logic
         const sessionPromise = supabase.auth.getSession();
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 10000)
+          setTimeout(() => reject(new Error('Session check timeout')), 15000)
         );
 
         const { data: { session }, error } = await Promise.race([
@@ -27,8 +27,13 @@ export const useAuth = () => {
 
         if (error) {
           console.error('Error getting session:', error);
-          // Clear any stale session data
-          await clearAuthState();
+          // Don't clear auth state on network errors, just log and continue
+          if (mounted) {
+            setUser(null);
+            setProfile(null);
+            setLoading(false);
+            setSessionChecked(true);
+          }
           return;
         }
 
@@ -45,8 +50,11 @@ export const useAuth = () => {
         }
       } catch (error) {
         console.error('Session check failed:', error);
-        // Clear any stale session data on error
-        await clearAuthState();
+        // On timeout or network error, don't clear everything - just set loading to false
+        if (mounted) {
+          setUser(null);
+          setProfile(null);
+        }
       } finally {
         if (mounted) {
           setLoading(false);
@@ -55,40 +63,9 @@ export const useAuth = () => {
       }
     };
 
-    // Clear authentication state
-    const clearAuthState = async () => {
-      try {
-        // Clear Supabase session
-        await supabase.auth.signOut();
-        
-        // Clear local storage items that might be causing issues
-        const keysToRemove = [
-          'supabase.auth.token',
-          'sb-qnqbbvbotcqmpdtixlgi-auth-token',
-          'sb-auth-token'
-        ];
-        
-        keysToRemove.forEach(key => {
-          try {
-            localStorage.removeItem(key);
-            sessionStorage.removeItem(key);
-          } catch (e) {
-            // Ignore errors when clearing storage
-          }
-        });
-
-        if (mounted) {
-          setUser(null);
-          setProfile(null);
-        }
-      } catch (error) {
-        console.error('Error clearing auth state:', error);
-      }
-    };
-
     getInitialSession();
 
-    // Listen for auth changes with error handling
+    // Listen for auth changes with improved error handling
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log('Auth state change:', event, session?.user?.id);
@@ -105,7 +82,7 @@ export const useAuth = () => {
           }
         } catch (error) {
           console.error('Error handling auth state change:', error);
-          await clearAuthState();
+          // Don't clear auth state on profile fetch errors
         } finally {
           if (mounted && sessionChecked) {
             setLoading(false);
@@ -125,15 +102,15 @@ export const useAuth = () => {
     try {
       console.log('Fetching profile for user:', userId);
       
-      // Add timeout to profile fetch - reduced to 10 seconds for better UX
+      // Increase timeout to 15 seconds for profile fetch
       const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle(); // Use maybeSingle() instead of single() to handle no rows gracefully
+        .maybeSingle();
 
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Profile fetch timeout')), 10000)
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 15000)
       );
 
       const { data, error } = await Promise.race([
@@ -143,7 +120,18 @@ export const useAuth = () => {
 
       if (error) {
         console.error('Error fetching profile:', error);
-        setProfile(null);
+        
+        // If it's a network/timeout error, don't try to create profile
+        if (error.message?.includes('timeout') || error.message?.includes('network')) {
+          setProfile(null);
+          return;
+        }
+        
+        // For other errors, still try to create profile if user exists
+        if (user && error.code !== 'PGRST116') { // PGRST116 is "not found"
+          console.log('Profile fetch failed, but will try to create profile');
+          await createProfileForUser(userId, user);
+        }
         return;
       }
 
@@ -160,45 +148,84 @@ export const useAuth = () => {
       setProfile(data);
     } catch (error) {
       console.error('Error fetching profile:', error);
-      setProfile(null);
+      
+      // Only try to create profile if we have user data and it's not a timeout
+      if (user && !error.message?.includes('timeout')) {
+        console.log('Will attempt to create profile after fetch error');
+        await createProfileForUser(userId, user);
+      } else {
+        setProfile(null);
+      }
     }
   };
 
   const createProfileForUser = async (userId: string, user: User) => {
     try {
-      console.log('Creating profile for existing user:', userId);
+      console.log('Creating profile for user:', userId);
       
       if (!user) {
         console.error('User object not provided for profile creation');
         return;
       }
 
-      const now = new Date().toISOString();
+      // Add retry logic for profile creation
+      let retries = 3;
+      let lastError = null;
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: userId,
-            role: user.user_metadata?.role || 'citizen',
-            name: user.user_metadata?.name || 'User',
-            aadhar: user.user_metadata?.aadhar,
-            phone: user.user_metadata?.phone,
-            eco_points: 0, // Only eco_points exists in the schema, removed 'points'
-            status: 'available',
-            created_at: now,
-            updated_at: now
+      while (retries > 0) {
+        try {
+          const now = new Date().toISOString();
+
+          const { data, error: profileError } = await supabase
+            .from('profiles')
+            .insert([
+              {
+                id: userId,
+                role: user.user_metadata?.role || 'citizen',
+                name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+                aadhar: user.user_metadata?.aadhar,
+                phone: user.user_metadata?.phone,
+                eco_points: 0,
+                status: 'available',
+                created_at: now,
+                updated_at: now
+              }
+            ])
+            .select()
+            .single();
+
+          if (profileError) {
+            lastError = profileError;
+            console.error(`Profile creation attempt ${4 - retries} failed:`, profileError);
+            
+            // If it's an RLS error, break the retry loop
+            if (profileError.code === '42501') {
+              console.error('RLS policy violation - check database policies');
+              break;
+            }
+            
+            retries--;
+            if (retries > 0) {
+              // Wait before retrying
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              continue;
+            }
+          } else {
+            console.log('Profile created successfully:', data);
+            setProfile(data);
+            return;
           }
-        ]);
-
-      if (profileError) {
-        console.error('Error creating profile for existing user:', profileError);
-        return;
+        } catch (error) {
+          lastError = error;
+          console.error(`Profile creation attempt ${4 - retries} failed:`, error);
+          retries--;
+          if (retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
+        }
       }
 
-      console.log('Profile created for existing user');
-      // Fetch the profile again
-      await fetchProfile(userId, user);
+      console.error('Failed to create profile after all retries:', lastError);
     } catch (error) {
       console.error('Error in createProfileForUser:', error);
     }
@@ -275,22 +302,6 @@ export const useAuth = () => {
       // Clear local state
       setUser(null);
       setProfile(null);
-      
-      // Clear any cached data
-      const keysToRemove = [
-        'supabase.auth.token',
-        'sb-qnqbbvbotcqmpdtixlgi-auth-token',
-        'sb-auth-token'
-      ];
-      
-      keysToRemove.forEach(key => {
-        try {
-          localStorage.removeItem(key);
-          sessionStorage.removeItem(key);
-        } catch (e) {
-          // Ignore errors when clearing storage
-        }
-      });
       
       return { error: null };
     } catch (error: unknown) {
