@@ -26,6 +26,7 @@ import { Complaint } from '../types';
 import { analyzeWasteReport, validateImageForAnalysis, validateAndFixEcoPoints } from '../lib/gemini';
 import { getUserNotifications, markNotificationAsRead, markAllNotificationsAsRead, Notification } from '../lib/notifications';
 import { CitizenProfile } from './CitizenProfile';
+import { EcoStoreRedemption } from './EcoStoreRedemption';
 
 interface CitizenDashboardProps {
   user: Profile;
@@ -55,6 +56,8 @@ interface DatabaseReport {
   priority_level?: string;
   eco_points?: number;
   ai_analysis?: any;
+  completion_timestamp?: string;
+  rejection_reason?: string;
 }
 
 export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogout }) => {
@@ -121,11 +124,13 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
             lng: report.lng,
             address: report.address
           },
-          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed',
+          status: report.status as 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval' | 'approved' | 'rejected',
           priority: (report.priority_level as 'low' | 'medium' | 'high' | 'urgent') || 'medium',
           submittedAt: new Date(report.created_at),
           ecoPoints: validatedPoints,
-          aiAnalysis: report.ai_analysis
+          aiAnalysis: report.ai_analysis,
+          completionTimestamp: report.completion_timestamp ? new Date(report.completion_timestamp) : undefined,
+          rejectionReason: report.rejection_reason
         };
       });
 
@@ -192,12 +197,19 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
     setCurrentUser(updatedProfile);
   };
 
+  const handlePointsUpdate = (newPoints: number) => {
+    setCurrentUser(prev => ({ ...prev, eco_points: newPoints }));
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'submitted': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'assigned': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'in-progress': return 'bg-orange-100 text-orange-800 border-orange-200';
       case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+      case 'submitted_for_approval': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'approved': return 'bg-green-100 text-green-800 border-green-200';
+      case 'rejected': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -208,6 +220,9 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
       case 'assigned': return <User size={14} />;
       case 'in-progress': return <Zap size={14} />;
       case 'completed': return <CheckCircle size={14} />;
+      case 'submitted_for_approval': return <Upload size={14} />;
+      case 'approved': return <CheckCircle size={14} />;
+      case 'rejected': return <AlertCircle size={14} />;
       default: return <AlertCircle size={14} />;
     }
   };
@@ -779,7 +794,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                   <div>
                     <p className="text-sm font-medium text-gray-600">Completed</p>
                     <p className="text-3xl font-bold text-gray-900">
-                      {userComplaints.filter(c => c.status === 'completed').length}
+                      {userComplaints.filter(c => c.status === 'completed' || c.status === 'approved').length}
                     </p>
                   </div>
                   <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center">
@@ -852,7 +867,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                         <div className="flex items-center space-x-2">
                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getStatusColor(complaint.status)}`}>
                             {getStatusIcon(complaint.status)}
-                            <span className="ml-1 capitalize">{complaint.status}</span>
+                            <span className="ml-1 capitalize">{complaint.status.replace('_', ' ')}</span>
                           </span>
                           <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border ${getPriorityColor(complaint.priority)}`}>
                             <span className="capitalize">{complaint.priority}</span>
@@ -935,7 +950,7 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                           <div className="flex flex-wrap gap-2">
                             <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border ${getStatusColor(complaint.status)}`}>
                               {getStatusIcon(complaint.status)}
-                              <span className="ml-2 capitalize">{complaint.status}</span>
+                              <span className="ml-2 capitalize">{complaint.status.replace('_', ' ')}</span>
                             </span>
                             <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold border ${getPriorityColor(complaint.priority)}`}>
                               <span className="capitalize">{complaint.priority}</span>
@@ -981,6 +996,45 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
                             </div>
                           </div>
                         )}
+
+                        {/* Status-specific information */}
+                        {complaint.status === 'submitted_for_approval' && (
+                          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                            <div className="flex items-center text-purple-700">
+                              <Upload size={16} className="mr-2" />
+                              <span className="font-semibold">Awaiting Admin Approval</span>
+                            </div>
+                            {complaint.completionTimestamp && (
+                              <p className="text-sm text-purple-600 mt-1">
+                                Submitted: {complaint.completionTimestamp.toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {complaint.status === 'rejected' && complaint.rejectionReason && (
+                          <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                            <div className="flex items-center text-red-700 mb-2">
+                              <AlertCircle size={16} className="mr-2" />
+                              <span className="font-semibold">Task Rejected</span>
+                            </div>
+                            <p className="text-sm text-red-600">{complaint.rejectionReason}</p>
+                          </div>
+                        )}
+
+                        {(complaint.status === 'approved' || complaint.status === 'completed') && (
+                          <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                            <div className="flex items-center text-green-700">
+                              <CheckCircle size={16} className="mr-2" />
+                              <span className="font-semibold">Task Completed Successfully!</span>
+                            </div>
+                            {complaint.completionTimestamp && (
+                              <p className="text-sm text-green-600 mt-1">
+                                Completed: {complaint.completionTimestamp.toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         
                         {complaint.assignedWorkerName && (
                           <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
@@ -1001,61 +1055,10 @@ export const CitizenDashboard: React.FC<CitizenDashboardProps> = ({ user, onLogo
 
         {/* Eco Store Tab */}
         {activeTab === 'store' && (
-          <div className="space-y-8">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-              <h2 className="text-3xl font-bold text-gray-800 flex items-center">
-                <ShoppingBag className="text-green-600 mr-3" size={32} />
-                Eco Store
-              </h2>
-              <div className="flex items-center bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-2xl shadow-lg">
-                <Award size={24} className="mr-3" />
-                <div>
-                  <span className="font-bold text-lg">{currentUser.eco_points || 0}</span>
-                  <span className="text-green-100 ml-2">Points Available</span>
-                </div>
-              </div>
-            </div>
-            
-            {loadingProducts ? (
-              <div className="flex justify-center items-center py-12">
-                <div className="w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
-                <span className="ml-3 text-gray-600">Loading products...</span>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {ecoProducts.map(product => (
-                  <div key={product.id} className="group bg-white rounded-3xl p-8 shadow-lg border border-gray-100 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2">
-                    <img
-                      src={product.image_url}
-                      alt={product.name}
-                      className="w-full h-48 object-cover rounded-2xl mb-6 group-hover:scale-105 transition-transform duration-300 shadow-lg"
-                    />
-                    
-                    <h3 className="text-xl font-bold text-gray-800 mb-3">{product.name}</h3>
-                    <p className="text-gray-600 mb-6 leading-relaxed">{product.description}</p>
-                    
-                    <div className="flex justify-between items-center mb-6">
-                      <div className="flex items-center text-green-600 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
-                        <Award size={20} className="mr-2" />
-                        <span className="font-bold text-lg">{product.point_cost} Points</span>
-                      </div>
-                      <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                        {product.quantity} in stock
-                      </span>
-                    </div>
-                    
-                    <button
-                      disabled={(currentUser.eco_points || 0) < product.point_cost || product.quantity === 0}
-                      className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white py-4 px-6 rounded-2xl font-bold text-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transform hover:scale-105 shadow-lg hover:shadow-xl"
-                    >
-                      {(currentUser.eco_points || 0) < product.point_cost ? 'Insufficient Points' : 
-                      product.quantity === 0 ? 'Out of Stock' : 'Redeem Now'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <EcoStoreRedemption 
+            user={currentUser} 
+            onPointsUpdate={handlePointsUpdate}
+          />
         )}
       </div>
 
