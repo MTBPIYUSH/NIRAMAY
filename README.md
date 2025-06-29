@@ -85,7 +85,7 @@ To transform waste management across India using technology, empowering **citize
 | Authentication     | Supabase (Email/Password Auth)          |
 | Database           | Supabase (PostgreSQL)                   |
 | Media + Location   | Browser Camera API, Google Maps API     |
-| Hosting            | Vercel / Netlify                        |
+| Hosting            | Netlify                                 |
 
 ---
 
@@ -164,6 +164,31 @@ npm run format
 ## Data Flow Summary
 
 Citizen → Reports waste → Location + photo sent → Admin views & assigns → Sub-worker cleans → Task completed → User rewarded → Analytics updated
+
+---
+
+## Setup Instructions
+
+1. **Clone the repo**
+   ```bash
+   git clone https://github.com/yourusername/niramay.git
+   cd niramay
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure Supabase**
+   - Set up Supabase project and enable Email Auth
+   - Create `profiles` table with role and aadhar fields
+   - Add RLS (Row-Level Security) to restrict access
+
+4. **Run the app**
+   ```bash
+   npm run dev
+   ```
 
 ---
 
