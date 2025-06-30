@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, DatabaseProfile } from './supabase';
 
 export interface SubWorkerProfile {
   id: string;
@@ -17,9 +17,9 @@ export interface SubWorkerProfile {
 }
 
 export interface SubWorkerFilters {
-  status: 'all' | 'available' | 'busy' | 'offline';
-  searchTerm: string;
-  ward: string;
+  status?: 'all' | 'available' | 'busy' | 'offline';
+  ward?: string;
+  searchTerm?: string;
 }
 
 export interface SubWorkerStats {
@@ -30,75 +30,72 @@ export interface SubWorkerStats {
   averageCompletionRate: number;
 }
 
-export interface ValidationResult {
-  isEligible: boolean;
-  reason?: string;
-}
-
+/**
+ * Fetch all subworker profiles from the database
+ */
 export const fetchSubWorkers = async (): Promise<SubWorkerProfile[]> => {
   try {
-    console.log('Fetching subworker profiles...');
-
+    console.log('🔍 Fetching subworker profiles...');
+    
     const { data, error } = await supabase
       .from('profiles')
-      .select(`
-        id,
-        name,
-        phone,
-        email,
-        role,
-        status,
-        ward,
-        city,
-        assigned_ward,
-        current_task_id,
-        task_completion_count,
-        created_at,
-        updated_at,
-        eco_points
-      `)
-      .eq('role', 'subworker');
+      .select('*')
+      .eq('role', 'subworker')
+      .neq('status', 'deleted') // Exclude deleted accounts
+      .order('name');
 
     if (error) {
-      console.error('Error fetching subworkers:', error);
+      console.error('❌ Error fetching subworkers:', error);
       throw error;
     }
 
-    if (!data) return [];
+    // Filter out test/debug accounts and convert to SubWorkerProfile
+    const filteredWorkers = (data || [])
+      .filter((worker: DatabaseProfile) => {
+        const isTestAccount = worker.name?.toLowerCase().includes('test') ||
+                             worker.name?.toLowerCase().includes('debug') ||
+                             worker.name?.toLowerCase().includes('demo');
+        
+        const hasValidName = worker.name && worker.name.trim().length > 0;
+        
+        return !isTestAccount && hasValidName;
+      })
+      .map((worker: DatabaseProfile): SubWorkerProfile => ({
+        id: worker.id,
+        name: worker.name,
+        phone: worker.phone,
+        email: undefined, // Email not stored in profiles table
+        status: (worker.status as 'available' | 'busy' | 'offline') || 'available',
+        ward: worker.ward,
+        city: worker.city,
+        assigned_ward: worker.assigned_ward,
+        current_task_id: worker.current_task_id,
+        task_completion_count: worker.task_completion_count || 0,
+        created_at: worker.created_at,
+        updated_at: worker.updated_at,
+        eco_points: worker.eco_points
+      }));
 
-    const subworkers: SubWorkerProfile[] = data.map((profile: any) => ({
-      id: profile.id,
-      name: profile.name || 'Unknown',
-      phone: profile.phone,
-      email: profile.email,
-      status: profile.status || 'available',
-      ward: profile.ward,
-      city: profile.city,
-      assigned_ward: profile.assigned_ward,
-      current_task_id: profile.current_task_id,
-      task_completion_count: profile.task_completion_count || 0,
-      created_at: profile.created_at,
-      updated_at: profile.updated_at,
-      eco_points: profile.eco_points || 0
-    }));
+    console.log('✅ Subworkers fetched:', filteredWorkers.length);
+    return filteredWorkers;
 
-    console.log('Subworkers loaded:', subworkers.length);
-    return subworkers;
-
-  } catch (err) {
-    console.error('Error in fetchSubWorkers:', err);
-    return [];
+  } catch (error) {
+    console.error('❌ Error in fetchSubWorkers:', error);
+    throw error;
   }
 };
 
+/**
+ * Fetch subworkers with real-time updates
+ */
 export const subscribeToSubWorkers = (
-  onUpdate: (workers: SubWorkerProfile[]) => void,
-  onError: (error: any) => void
+  callback: (workers: SubWorkerProfile[]) => void,
+  onError?: (error: Error) => void
 ) => {
-  console.log('Setting up real-time subscription for subworkers...');
-
+  console.log('🔄 Setting up real-time subworker subscription...');
+  
   const subscription = supabase
-    .channel('subworkers-channel')
+    .channel('subworkers')
     .on(
       'postgres_changes',
       {
@@ -108,43 +105,38 @@ export const subscribeToSubWorkers = (
         filter: 'role=eq.subworker'
       },
       async (payload) => {
-        console.log('Real-time update received:', payload);
-        
+        console.log('🔄 Subworker data changed:', payload.eventType);
         try {
-          // Fetch updated workers list
-          const updatedWorkers = await fetchSubWorkers();
-          onUpdate(updatedWorkers);
+          const workers = await fetchSubWorkers();
+          callback(workers);
         } catch (error) {
-          console.error('Error handling real-time update:', error);
-          onError(error);
+          console.error('❌ Error handling real-time update:', error);
+          onError?.(error as Error);
         }
       }
     )
-    .subscribe((status) => {
-      console.log('Subscription status:', status);
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ Successfully subscribed to subworkers updates');
-      } else if (status === 'CHANNEL_ERROR') {
-        console.error('❌ Channel subscription error');
-        onError(new Error('Failed to subscribe to real-time updates'));
-      }
-    });
+    .subscribe();
 
   return subscription;
 };
 
+/**
+ * Filter subworkers based on criteria
+ */
 export const filterSubWorkers = (
-  subworkers: SubWorkerProfile[],
+  workers: SubWorkerProfile[],
   filters: SubWorkerFilters
 ): SubWorkerProfile[] => {
-  return subworkers.filter(worker => {
+  return workers.filter(worker => {
     // Status filter
     if (filters.status && filters.status !== 'all' && worker.status !== filters.status) {
       return false;
     }
 
     // Ward filter
-    if (filters.ward && filters.ward !== 'all' && worker.assigned_ward !== filters.ward) {
+    if (filters.ward && 
+        !worker.ward?.toLowerCase().includes(filters.ward.toLowerCase()) &&
+        !worker.assigned_ward?.toLowerCase().includes(filters.ward.toLowerCase())) {
       return false;
     }
 
@@ -152,11 +144,11 @@ export const filterSubWorkers = (
     if (filters.searchTerm) {
       const searchLower = filters.searchTerm.toLowerCase();
       const matchesName = worker.name.toLowerCase().includes(searchLower);
-      const matchesPhone = worker.phone?.toLowerCase().includes(searchLower);
-      const matchesWard = worker.ward?.toLowerCase().includes(searchLower);
-      const matchesAssignedWard = worker.assigned_ward?.toLowerCase().includes(searchLower);
+      const matchesWard = worker.ward?.toLowerCase().includes(searchLower) || 
+                         worker.assigned_ward?.toLowerCase().includes(searchLower);
+      const matchesPhone = worker.phone?.includes(filters.searchTerm);
       
-      if (!matchesName && !matchesPhone && !matchesWard && !matchesAssignedWard) {
+      if (!matchesName && !matchesWard && !matchesPhone) {
         return false;
       }
     }
@@ -165,153 +157,72 @@ export const filterSubWorkers = (
   });
 };
 
+/**
+ * Sort subworkers by availability and other criteria
+ */
 export const sortSubWorkers = (
-  subworkers: SubWorkerProfile[],
-  sortBy: 'availability' | 'name' | 'performance' | 'ward',
-  sortOrder: 'asc' | 'desc' = 'asc'
+  workers: SubWorkerProfile[],
+  sortBy: 'availability' | 'name' | 'performance' | 'ward' = 'availability'
 ): SubWorkerProfile[] => {
-  return [...subworkers].sort((a, b) => {
-    let comparison = 0;
-
+  return [...workers].sort((a, b) => {
     switch (sortBy) {
       case 'availability':
-        // Sort by status priority: available > busy > offline
-        const statusPriority = { available: 3, busy: 2, offline: 1 };
-        comparison = (statusPriority[a.status] || 0) - (statusPriority[b.status] || 0);
-        break;
+        // Available first, then busy, then offline
+        const statusOrder = { available: 0, busy: 1, offline: 2 };
+        const statusDiff = statusOrder[a.status] - statusOrder[b.status];
+        if (statusDiff !== 0) return statusDiff;
+        // Then by name
+        return a.name.localeCompare(b.name);
+      
       case 'name':
-        comparison = a.name.localeCompare(b.name);
-        break;
+        return a.name.localeCompare(b.name);
+      
       case 'performance':
-        comparison = a.task_completion_count - b.task_completion_count;
-        break;
+        return b.task_completion_count - a.task_completion_count;
+      
       case 'ward':
-        comparison = (a.assigned_ward || '').localeCompare(b.assigned_ward || '');
-        break;
+        const aWard = a.ward || a.assigned_ward || '';
+        const bWard = b.ward || b.assigned_ward || '';
+        return aWard.localeCompare(bWard);
+      
       default:
         return 0;
     }
-
-    return sortOrder === 'desc' ? -comparison : comparison;
   });
 };
 
-export const getSubWorkerStats = (subworkers: SubWorkerProfile[]): SubWorkerStats => {
-  const totalTasks = subworkers.reduce((sum, worker) => sum + worker.task_completion_count, 0);
-  const averageCompletionRate = subworkers.length > 0 ? Math.round(totalTasks / subworkers.length) : 0;
+/**
+ * Get subworker statistics
+ */
+export const getSubWorkerStats = (workers: SubWorkerProfile[]): SubWorkerStats => {
+  const total = workers.length;
+  const available = workers.filter(w => w.status === 'available').length;
+  const busy = workers.filter(w => w.status === 'busy').length;
+  const offline = workers.filter(w => w.status === 'offline').length;
+  
+  const totalTasks = workers.reduce((sum, w) => sum + w.task_completion_count, 0);
+  const averageCompletionRate = total > 0 ? Math.round(totalTasks / total) : 0;
 
   return {
-    total: subworkers.length,
-    available: subworkers.filter(w => w.status === 'available').length,
-    busy: subworkers.filter(w => w.status === 'busy').length,
-    offline: subworkers.filter(w => w.status === 'offline').length,
+    total,
+    available,
+    busy,
+    offline,
     averageCompletionRate
   };
 };
 
-export const validateWorkerAssignment = (
-  worker: SubWorkerProfile,
-  reportWard?: string
-): ValidationResult => {
-  // Check if worker is available
-  if (worker.status !== 'available') {
-    return {
-      isEligible: false,
-      reason: `Worker is ${worker.status}`
-    };
-  }
-
-  // Check if worker already has a task assigned
-  if (worker.current_task_id) {
-    return {
-      isEligible: false,
-      reason: 'Already has task'
-    };
-  }
-
-  // Check ward assignment if both worker and report have ward information
-  if (worker.assigned_ward && reportWard && worker.assigned_ward !== reportWard) {
-    return {
-      isEligible: false,
-      reason: `Wrong ward (${worker.assigned_ward})`
-    };
-  }
-
-  return {
-    isEligible: true
-  };
-};
-
-export const updateSubWorkerStatus = async (
-  workerId: string,
-  newStatus: 'available' | 'busy' | 'offline'
-): Promise<{ success: boolean; error?: string }> => {
-  try {
-    const { error } = await supabase
-      .from('profiles')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', workerId)
-      .eq('role', 'subworker');
-
-    if (error) {
-      console.error('Error updating subworker status:', error);
-      return {
-        success: false,
-        error: 'Failed to update worker status'
-      };
-    }
-
-    return {
-      success: true
-    };
-
-  } catch (err) {
-    console.error('Error in updateSubWorkerStatus:', err);
-    return {
-      success: false,
-      error: 'Unexpected error occurred while updating status'
-    };
-  }
-};
-
+/**
+ * Assign a task to a subworker
+ */
 export const assignTaskToSubWorker = async (
   reportId: string,
   workerId: string
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<void> => {
   try {
-    // First validate the assignment by fetching current worker status
-    const { data: worker, error: workerError } = await supabase
-      .from('profiles')
-      .select('status, assigned_ward, current_task_id')
-      .eq('id', workerId)
-      .eq('role', 'subworker')
-      .single();
+    console.log('📋 Assigning task:', reportId, 'to worker:', workerId);
 
-    if (workerError || !worker) {
-      return {
-        success: false,
-        error: 'Worker not found or not a subworker'
-      };
-    }
-
-    if (worker.status !== 'available') {
-      return {
-        success: false,
-        error: `Worker is currently ${worker.status}`
-      };
-    }
-
-    if (worker.current_task_id) {
-      return {
-        success: false,
-        error: 'Worker already has a task assigned'
-      };
-    }
-
-    // Update the report to assign it to the worker
+    // Start a transaction-like operation
     const { error: reportError } = await supabase
       .from('reports')
       .update({
@@ -322,15 +233,12 @@ export const assignTaskToSubWorker = async (
       .eq('id', reportId);
 
     if (reportError) {
-      console.error('Error updating report:', reportError);
-      return {
-        success: false,
-        error: 'Failed to assign report to worker'
-      };
+      console.error('❌ Error updating report:', reportError);
+      throw reportError;
     }
 
-    // Update the worker's profile
-    const { error: profileError } = await supabase
+    // Update worker status
+    const { error: workerError } = await supabase
       .from('profiles')
       .update({
         status: 'busy',
@@ -339,50 +247,133 @@ export const assignTaskToSubWorker = async (
       })
       .eq('id', workerId);
 
-    if (profileError) {
-      console.error('Error updating worker profile:', profileError);
-      // Try to rollback the report assignment
+    if (workerError) {
+      console.error('❌ Error updating worker status:', workerError);
+      // Rollback report assignment
       await supabase
         .from('reports')
         .update({
           assigned_to: null,
-          status: 'submitted',
-          updated_at: new Date().toISOString()
+          status: 'submitted'
         })
         .eq('id', reportId);
-
-      return {
-        success: false,
-        error: 'Failed to update worker status'
-      };
+      
+      throw workerError;
     }
 
-    // Create a notification for the assigned worker
-    const { error: notificationError } = await supabase
-      .from('notifications')
-      .insert({
-        user_id: workerId,
-        title: 'New Task Assigned',
-        message: 'You have been assigned a new cleanup task. Please check your dashboard for details.',
-        type: 'assignment',
-        related_report_id: reportId,
-        is_read: false
-      });
+    console.log('✅ Task assigned successfully');
 
-    if (notificationError) {
-      console.error('Error creating notification:', notificationError);
-      // Don't fail the assignment if notification creation fails
+  } catch (error) {
+    console.error('❌ Error in assignTaskToSubWorker:', error);
+    throw error;
+  }
+};
+
+/**
+ * Update subworker status
+ */
+export const updateSubWorkerStatus = async (
+  workerId: string,
+  status: 'available' | 'busy' | 'offline'
+): Promise<void> => {
+  try {
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        status,
+        updated_at: new Date().toISOString(),
+        // Clear current task if going offline or available
+        ...(status !== 'busy' && { current_task_id: null })
+      })
+      .eq('id', workerId);
+
+    if (error) {
+      console.error('❌ Error updating worker status:', error);
+      throw error;
     }
 
-    return {
-      success: true
-    };
+    console.log('✅ Worker status updated:', workerId, status);
 
-  } catch (err) {
-    console.error('Error assigning task to subworker:', err);
+  } catch (error) {
+    console.error('❌ Error in updateSubWorkerStatus:', error);
+    throw error;
+  }
+};
+
+/**
+ * Get available workers for a specific ward
+ */
+export const getAvailableWorkersForWard = async (ward?: string): Promise<SubWorkerProfile[]> => {
+  try {
+    let query = supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'subworker')
+      .eq('status', 'available');
+
+    if (ward) {
+      query = query.or(`ward.eq.${ward},assigned_ward.eq.${ward}`);
+    }
+
+    const { data, error } = await query.order('task_completion_count', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching available workers:', error);
+      throw error;
+    }
+
+    return (data || []).map((worker: DatabaseProfile): SubWorkerProfile => ({
+      id: worker.id,
+      name: worker.name,
+      phone: worker.phone,
+      email: undefined,
+      status: (worker.status as 'available' | 'busy' | 'offline') || 'available',
+      ward: worker.ward,
+      city: worker.city,
+      assigned_ward: worker.assigned_ward,
+      current_task_id: worker.current_task_id,
+      task_completion_count: worker.task_completion_count || 0,
+      created_at: worker.created_at,
+      updated_at: worker.updated_at,
+      eco_points: worker.eco_points
+    }));
+
+  } catch (error) {
+    console.error('❌ Error in getAvailableWorkersForWard:', error);
+    throw error;
+  }
+};
+
+/**
+ * Validate worker assignment eligibility
+ */
+export const validateWorkerAssignment = (
+  worker: SubWorkerProfile,
+  reportWard?: string
+): { isEligible: boolean; reason?: string } => {
+  if (worker.status !== 'available') {
     return {
-      success: false,
-      error: 'Unexpected error occurred while assigning task'
+      isEligible: false,
+      reason: `Worker is currently ${worker.status}`
     };
   }
+
+  if (worker.current_task_id) {
+    return {
+      isEligible: false,
+      reason: 'Worker already has an active task'
+    };
+  }
+
+  if (reportWard && worker.ward && worker.assigned_ward) {
+    const workerWards = [worker.ward, worker.assigned_ward].filter(Boolean);
+    if (!workerWards.some(ward => ward.toLowerCase().includes(reportWard.toLowerCase()))) {
+      return {
+        isEligible: false,
+        reason: 'Worker is not assigned to this ward'
+      };
+    }
+  }
+
+  return { isEligible: true };
 };

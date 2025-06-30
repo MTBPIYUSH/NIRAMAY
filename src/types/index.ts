@@ -3,7 +3,7 @@ export interface User {
   name: string;
   email: string;
   role: 'citizen' | 'admin' | 'subworker';
-  eco_points?: number; // Only eco-points, removed points
+  eco_points?: number;
   location?: string;
   ward?: string;
   city?: string;
@@ -23,13 +23,13 @@ export interface Complaint {
     lng: number;
     address: string;
   };
-  status: 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval' | 'approved' | 'rejected';
+  status: 'submitted' | 'assigned' | 'in-progress' | 'completed' | 'submitted_for_approval';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assignedTo?: string;
   assignedWorkerName?: string;
   submittedAt: Date;
   completedAt?: Date;
-  ecoPoints?: number; // Only eco-points, removed pointsAwarded
+  ecoPoints?: number;
   proofImage?: string;
   proofLocation?: {
     lat: number;
@@ -37,8 +37,6 @@ export interface Complaint {
     address: string;
   };
   rejectionComment?: string;
-  rejectionReason?: string;
-  completionTimestamp?: Date;
   aiAnalysis?: {
     waste_type: string;
     severity: string;
@@ -65,7 +63,7 @@ export interface EcoProduct {
   id: string;
   name: string;
   description: string;
-  eco_points: number; // Changed from points to eco_points
+  eco_points: number;
   image: string;
   category: 'dustbins' | 'compost' | 'tools' | 'plants';
   stock: number;
@@ -87,7 +85,7 @@ export interface Analytics {
 export interface LeaderboardEntry {
   id: string;
   name: string;
-  eco_points: number; // Changed from points to eco_points
+  eco_points: number;
   rank: number;
   city: string;
   reportsCount: number;

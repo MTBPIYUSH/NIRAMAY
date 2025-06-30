@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User } from '@supabase/supabase-js';
-import { supabase, Profile } from '../lib/supabase';
+import { supabase, Profile, DatabaseProfile } from '../lib/supabase';
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -10,13 +10,24 @@ export const useAuth = () => {
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
 
     const initializeAuth = async () => {
       try {
         console.log('🔄 Initializing authentication...');
         
-        // Get initial session with increased timeout
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // Set a timeout for session check
+        const sessionPromise = supabase.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('Session check timeout')), 10000);
+        });
+
+        const { data: { session }, error } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any;
+
+        if (timeoutId) clearTimeout(timeoutId);
 
         if (error) {
           console.error('❌ Session check error:', error);
@@ -35,7 +46,7 @@ export const useAuth = () => {
           console.log('✅ Found existing session for user:', session.user.id);
           setUser(session.user);
           
-          // Fetch profile immediately
+          // Fetch profile with timeout
           await fetchProfile(session.user.id, session.user);
         } else {
           console.log('ℹ️ No existing session found');
@@ -87,19 +98,34 @@ export const useAuth = () => {
 
     return () => {
       mounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
       subscription.unsubscribe();
     };
   }, []);
 
   const fetchProfile = async (userId: string, user?: User) => {
+    let timeoutId: NodeJS.Timeout;
+    
     try {
       console.log('🔍 Fetching profile for user:', userId);
       
-      const { data, error } = await supabase
+      // Set timeout for profile fetch
+      const profilePromise = supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .maybeSingle();
+
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('Profile fetch timeout')), 8000);
+      });
+
+      const { data, error } = await Promise.race([
+        profilePromise,
+        timeoutPromise
+      ]) as any;
+
+      if (timeoutId) clearTimeout(timeoutId);
 
       if (error) {
         console.error('❌ Profile fetch error:', error);
@@ -124,7 +150,30 @@ export const useAuth = () => {
       }
 
       console.log('✅ Profile fetched successfully:', data.role);
-      setProfile(data);
+      
+      // Convert database profile to typed profile
+      const typedProfile: Profile = {
+        id: data.id,
+        role: data.role as 'citizen' | 'admin' | 'subworker',
+        aadhar: data.aadhar,
+        name: data.name,
+        email: user?.email,
+        phone: data.phone,
+        ward: data.ward,
+        city: data.city,
+        eco_points: data.eco_points,
+        status: data.status as 'available' | 'busy' | 'offline',
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        assigned_ward: data.assigned_ward,
+        current_task_id: data.current_task_id,
+        task_completion_count: data.task_completion_count
+      };
+      
+      setProfile(typedProfile);
     } catch (error) {
       console.error('❌ Profile fetch failed:', error);
       
@@ -134,6 +183,8 @@ export const useAuth = () => {
       } else {
         setProfile(null);
       }
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
     }
   };
 
@@ -186,14 +237,56 @@ export const useAuth = () => {
             .single();
           
           if (existingProfile) {
-            setProfile(existingProfile);
+            const typedProfile: Profile = {
+              id: existingProfile.id,
+              role: existingProfile.role as 'citizen' | 'admin' | 'subworker',
+              aadhar: existingProfile.aadhar,
+              name: existingProfile.name,
+              email: user.email,
+              phone: existingProfile.phone,
+              ward: existingProfile.ward,
+              city: existingProfile.city,
+              eco_points: existingProfile.eco_points,
+              status: existingProfile.status as 'available' | 'busy' | 'offline',
+              created_at: existingProfile.created_at,
+              updated_at: existingProfile.updated_at,
+              address: existingProfile.address,
+              latitude: existingProfile.latitude,
+              longitude: existingProfile.longitude,
+              assigned_ward: existingProfile.assigned_ward,
+              current_task_id: existingProfile.current_task_id,
+              task_completion_count: existingProfile.task_completion_count
+            };
+            setProfile(typedProfile);
           }
         }
         return;
       }
 
       console.log('✅ Profile created successfully:', data);
-      setProfile(data);
+      
+      const typedProfile: Profile = {
+        id: data.id,
+        role: data.role as 'citizen' | 'admin' | 'subworker',
+        aadhar: data.aadhar,
+        name: data.name,
+        email: user.email,
+        phone: data.phone,
+        ward: data.ward,
+        city: data.city,
+        eco_points: data.eco_points,
+        status: data.status as 'available' | 'busy' | 'offline',
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        address: data.address,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        assigned_ward: data.assigned_ward,
+        current_task_id: data.current_task_id,
+        task_completion_count: data.task_completion_count
+      };
+      
+      setProfile(typedProfile);
     } catch (error) {
       console.error('❌ Error in createProfileForUser:', error);
     }
